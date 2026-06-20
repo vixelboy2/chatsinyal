@@ -599,11 +599,9 @@ function renderHome() {
     </div>`;
 }
 
-function renderChat() {
+function getChatMessagesHtml() {
   const c = state.activeChat;
-  const isOnline = state.onlineUsers.has(c.id);
-
-  const msgsHtml = state.messages.length ? state.messages.map(m => {
+  return state.messages.length ? state.messages.map(m => {
     const mine = m.from === state.me.id;
     let ticks = '';
     if (mine) {
@@ -621,9 +619,14 @@ function renderChat() {
       </div>
       Belum ada pesan dengan <b>${escapeHtml(c.name)}</b>.<br>Kirim pesan pertama untuk memulai percakapan aman.
     </div>`;
+}
+
+function renderChat() {
+  const c = state.activeChat;
+  const isOnline = state.onlineUsers.has(c.id);
 
   return `
-    <div class="chat-header fade-in">
+    <div class="chat-header fade-in" data-id="${c.id}">
       <button class="icon-btn" id="back-home-btn">${ICONS.back}</button>
       <div class="avatar">${initials(c.name)}</div>
       <div>
@@ -634,7 +637,7 @@ function renderChat() {
         </div>
       </div>
     </div>
-    <div class="messages" id="messages-container">${msgsHtml}</div>
+    <div class="messages" id="messages-container">${getChatMessagesHtml()}</div>
     <div class="composer fade-in">
       <input class="field" id="composer-input" placeholder="Tulis pesan..." value="${escapeHtml(state.draftText)}" autocomplete="off">
       <button class="send-btn" id="send-btn" ${!state.draftText.trim() ? 'disabled' : ''}>${ICONS.send}</button>
@@ -652,9 +655,29 @@ function render() {
     app.innerHTML = renderHome();
     attachHomeHandlers();
   } else if (state.view === 'chat') {
-    app.innerHTML = renderChat();
-    attachChatHandlers();
-    scrollMessagesToBottom();
+    if (app.querySelector(`.chat-header[data-id="${state.activeChat.id}"]`)) {
+      // Partial update to avoid flickering and losing input focus
+      const isOnline = state.onlineUsers.has(state.activeChat.id);
+      
+      const msgContainer = document.getElementById('messages-container');
+      if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
+      
+      const statusEl = document.querySelector('.chat-status');
+      if (statusEl) {
+        statusEl.style.color = isOnline ? '#22c55e' : 'var(--text-muted)';
+        statusEl.innerHTML = `<span class="status-dot ${isOnline ? 'online' : ''}" style="margin-right:4px;"></span>${isOnline ? 'Online' : 'Offline'}`;
+      }
+      
+      // Update send button state
+      const btn = document.getElementById('send-btn');
+      if (btn) btn.disabled = !state.draftText.trim();
+      
+      scrollMessagesToBottom();
+    } else {
+      app.innerHTML = renderChat();
+      attachChatHandlers();
+      scrollMessagesToBottom();
+    }
   }
 }
 
