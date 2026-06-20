@@ -1,0 +1,93 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+
+// ==========================================
+// SUPABASE CONFIGURATION
+// Replace these with your actual Supabase URL and Anon Key
+// You can find them in your Supabase Project Settings -> API
+// ==========================================
+const SUPABASE_URL = 'https://vuquyqqxgpdastpitrpl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1cXV5cXF4Z3BkYXN0cGl0cnBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzQyMTIsImV4cCI6MjA5NzUxMDIxMn0.j1Md5nVeI8KRZv8CGNbmvB5q9Ouazfs1dd8bKK-OfDw';
+
+// Initialize Supabase Client
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Helper functions for our App
+export const db = {
+  async getUser(id) {
+    const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
+    if (error) return null;
+    return data;
+  },
+
+  async createUser(id, name) {
+    const { data, error } = await supabase.from('users').insert([{ id, name }]).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async addFollow(followerId, followedId) {
+    const { error } = await supabase.from('follows').insert([{ follower_id: followerId, followed_id: followedId }]);
+    // Ignore duplicate errors if they already follow each other
+    if (error && error.code !== '23505') throw error; 
+    return true;
+  },
+
+  async getMutuals(userId) {
+    // A mutual connection means user A follows B AND user B follows A.
+    // We can do this with a somewhat complex query or two simpler queries.
+    // For simplicity: get all followed by me, and all following me.
+    const [{ data: following }, { data: followers }] = await Promise.all([
+      supabase.from('follows').select('followed_id').eq('follower_id', userId),
+      supabase.from('follows').select('follower_id').eq('followed_id', userId)
+    ]);
+
+    const followingIds = following?.map(f => f.followed_id) || [];
+    const followerIds = followers?.map(f => f.follower_id) || [];
+
+    const mutualIds = followingIds.filter(id => followerIds.includes(id));
+    const pendingIds = followingIds.filter(id => !followerIds.includes(id));
+    const incomingIds = followerIds.filter(id => !followingIds.includes(id));
+
+    return { mutualIds, pendingIds, incomingIds };
+  },
+
+  async getUsersByIds(ids) {
+    if (!ids || ids.length === 0) return [];
+    const { data, error } = await supabase.from('users').select('*').in('id', ids);
+    if (error) return [];
+    return data;
+  },
+
+  async getMessages(user1, user2) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`and(sender_id.eq.${user1},receiver_id.eq.${user2}),and(sender_id.eq.${user2},receiver_id.eq.${user1})`)
+      .order('created_at', { ascending: true });
+    
+    if (error) return [];
+    return data;
+  },
+
+  async getLastMessage(user1, user2) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`and(sender_id.eq.${user1},receiver_id.eq.${user2}),and(sender_id.eq.${user2},receiver_id.eq.${user1})`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (error) return null;
+    return data;
+  },
+
+  async sendMessage(senderId, receiverId, text) {
+    const { error } = await supabase.from('messages').insert([{
+      sender_id: senderId,
+      receiver_id: receiverId,
+      text: text
+    }]);
+    if (error) throw error;
+  }
+};
