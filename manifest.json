@@ -1,0 +1,21 @@
+{
+  "name": "Sinyal Chat",
+  "short_name": "Sinyal",
+  "description": "Aplikasi chat real-time yang cepat dan aman dengan Supabase.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#110d0a",
+  "theme_color": "#ff7b00",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
