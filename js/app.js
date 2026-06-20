@@ -94,6 +94,9 @@ function setupHomeSubscription() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
       loadHomeData().then(render);
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${state.me.id}` }, payload => {
+      loadHomeData().then(render);
+    })
     .subscribe();
   
   state.subscriptions.push(channel);
@@ -128,6 +131,12 @@ function setupChatSubscription(chatPartnerId) {
         if (msg) {
           msg.read_at = payload.new.read_at;
           render();
+        } else {
+          // Race condition: UPDATE arrived before INSERT returned the ID. Re-fetch.
+          refreshMessages().then(() => {
+            render();
+            scrollMessagesToBottom();
+          });
         }
       }
     })
