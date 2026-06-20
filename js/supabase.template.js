@@ -5,8 +5,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 // Replace these with your actual Supabase URL and Anon Key
 // You can find them in your Supabase Project Settings -> API
 // ==========================================
-const SUPABASE_URL = 'https://vuquyqqxgpdastpitrpl.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1cXV5cXF4Z3BkYXN0cGl0cnBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzQyMTIsImV4cCI6MjA5NzUxMDIxMn0.j1Md5nVeI8KRZv8CGNbmvB5q9Ouazfs1dd8bKK-OfDw';
+const SUPABASE_URL = '__SUPABASE_URL__';
+const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
 
 // Initialize Supabase Client
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
