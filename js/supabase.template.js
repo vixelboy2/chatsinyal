@@ -30,6 +30,27 @@ export const db = {
     if (error) throw error;
   },
 
+  async uploadAvatar(id, file) {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${id}_${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+    if (!data || !data.publicUrl) throw new Error("Gagal mendapatkan URL gambar");
+
+    const { error: updateError } = await supabase.from('users')
+      .update({ avatar_url: data.publicUrl })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+    return data.publicUrl;
+  },
+
   async addFollow(followerId, followedId) {
     const { error } = await supabase.from('follows').insert([{ follower_id: followerId, followed_id: followedId }]);
     // Ignore duplicate errors if they already follow each other

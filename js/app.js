@@ -22,6 +22,13 @@ function initials(name) {
   return (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 }
 
+function renderAvatarHtml(name, avatar_url) {
+  if (avatar_url) {
+    return `<div class="avatar"><img src="${escapeHtml(avatar_url)}" alt="${escapeHtml(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>`;
+  }
+  return `<div class="avatar">${initials(name)}</div>`;
+}
+
 const ICONS = {
   logout: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   back: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
@@ -168,7 +175,7 @@ async function init() {
       const parsed = JSON.parse(saved);
       const user = await db.getUser(parsed.id);
       if (user) {
-        state.me = { id: user.id, name: user.name };
+        state.me = { id: user.id, name: user.name, avatar_url: user.avatar_url };
         await goHome();
         return;
       } else {
@@ -204,7 +211,7 @@ async function createAccount() {
     }
     
     await db.createUser(id, name);
-    state.me = { id, name };
+    state.me = { id, name, avatar_url: null };
     localStorage.setItem('sinyal_profile', JSON.stringify(state.me));
     
     state.onboardMode = 'created';
@@ -228,7 +235,7 @@ async function loginWithId() {
     if (!user) {
       state.error = 'ID tidak ditemukan.';
     } else {
-      state.me = { id: user.id, name: user.name };
+      state.me = { id: user.id, name: user.name, avatar_url: user.avatar_url };
       localStorage.setItem('sinyal_profile', JSON.stringify(state.me));
       await goHome();
       return;
@@ -325,6 +332,7 @@ async function loadHomeData() {
       return {
         id: u.id,
         name: u.name,
+        avatar_url: u.avatar_url,
         lastText: lastMsg ? lastMsg.text : null,
         lastTs: lastMsg ? lastMsg.created_at : 0,
         lastMine: lastMsg ? lastMsg.sender_id === state.me.id : false,
@@ -334,8 +342,8 @@ async function loadHomeData() {
     
     state.mutualList.sort((a, b) => new Date(b.lastTs || 0) - new Date(a.lastTs || 0));
     
-    state.pendingList = pendingUsers.map(u => ({ id: u.id, name: u.name }));
-    state.incomingList = incomingUsers.map(u => ({ id: u.id, name: u.name }));
+    state.pendingList = pendingUsers.map(u => ({ id: u.id, name: u.name, avatar_url: u.avatar_url }));
+    state.incomingList = incomingUsers.map(u => ({ id: u.id, name: u.name, avatar_url: u.avatar_url }));
   } catch (e) {
     console.error("Error loading home data", e);
   }
@@ -397,6 +405,22 @@ function copyMyId() {
   }
 }
 
+async function uploadAvatarAction(file) {
+  if (!file) return;
+  state.busy = true; render();
+  
+  try {
+    const url = await db.uploadAvatar(state.me.id, file);
+    state.me.avatar_url = url;
+    localStorage.setItem('sinyal_profile', JSON.stringify(state.me));
+  } catch (err) {
+    alert("Gagal mengunggah foto profil: " + err.message);
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
 function copyProfileId() {
   if (!state.activeChat) return;
   const text = state.activeChat.id;
@@ -421,7 +445,7 @@ function toggleProfileModal() {
         <div class="modal-overlay" id="profile-modal-overlay">
           <div class="profile-modal fade-in" id="profile-modal-box">
             <button class="close-btn" id="close-profile-btn">✕</button>
-            <div class="avatar">${initials(c.name)}</div>
+            ${renderAvatarHtml(c.name, c.avatar_url)}
             <div class="profile-name">${escapeHtml(c.name)}</div>
             <div class="profile-id">${formatId(c.id)}</div>
             <button class="btn btn-primary btn-block" id="copy-profile-btn" style="margin-top:16px;">
@@ -444,9 +468,9 @@ function toggleProfileModal() {
 }
 
 // ============ Chat ============
-async function openChat(id, name) {
+async function openChat(id, name, avatar_url) {
   state.view = 'chat';
-  state.activeChat = { id, name };
+  state.activeChat = { id, name, avatar_url };
   state.draftText = '';
   
   setupChatSubscription(id);
@@ -626,7 +650,7 @@ function renderHome() {
     <div class="section-title">Permintaan masuk</div>
     ${state.incomingList.map(p => `
       <div class="person-row">
-        <div class="avatar">${initials(p.name)}</div>
+        ${renderAvatarHtml(p.name, p.avatar_url)}
         <div class="person-info">
           <div class="person-name">${escapeHtml(p.name)}</div>
           <div class="person-sub">Menambahkanmu lewat ID</div>
@@ -656,8 +680,8 @@ function renderHome() {
       }
 
       return `
-      <div class="person-row open-chat" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
-        <div class="avatar">${initials(p.name)}</div>
+      <div class="person-row open-chat" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-avatar="${escapeHtml(p.avatar_url || '')}">
+        ${renderAvatarHtml(p.name, p.avatar_url)}
         <div class="person-info">
           <div class="person-name">
             <span class="status-dot ${isOnline ? 'online' : ''}"></span>
@@ -679,7 +703,7 @@ function renderHome() {
     <div class="section-title">Menunggu balasan</div>
     ${state.pendingList.map(p => `
       <div class="person-row" style="opacity: 0.6;">
-        <div class="avatar">${initials(p.name)}</div>
+        ${renderAvatarHtml(p.name, p.avatar_url)}
         <div class="person-info">
           <div class="person-name">${escapeHtml(p.name)}</div>
           <div class="person-sub">Menunggu mereka menambahkanmu balik</div>
@@ -744,7 +768,7 @@ function renderChat() {
   return `
     <div class="chat-header fade-in" data-id="${c.id}" id="chat-header-area" style="cursor: pointer;">
       <button class="icon-btn" id="back-home-btn" style="z-index: 2;">${ICONS.back}</button>
-      <div class="avatar">${initials(c.name)}</div>
+      ${renderAvatarHtml(c.name, c.avatar_url)}
       <div>
         <div class="chat-name">${escapeHtml(c.name)}</div>
         <div class="chat-status" style="color: ${isOnline ? '#22c55e' : 'var(--text-muted)'};">
@@ -781,7 +805,12 @@ function renderSettings() {
     </div>
     <div class="settings-page">
       <div class="settings-user-card">
-        <div class="avatar">${initials(state.me?.name || '?')}</div>
+        <div style="position:relative; cursor:pointer;" id="settings-avatar-btn">
+          ${renderAvatarHtml(state.me?.name || '?', state.me?.avatar_url)}
+          <div class="avatar-edit-overlay">${ICONS.edit}</div>
+        </div>
+        <input type="file" id="avatar-upload-input" accept="image/*" style="display:none;">
+        
         <div style="flex:1;">
           <div class="user-name" style="display:flex;align-items:center;gap:8px;">
             ${escapeHtml(state.me?.name || '')}
@@ -912,7 +941,7 @@ function attachHomeHandlers() {
   });
   
   document.querySelectorAll('.open-chat').forEach(row => {
-    row.onclick = () => openChat(row.getAttribute('data-id'), row.getAttribute('data-name'));
+    row.onclick = () => openChat(row.getAttribute('data-id'), row.getAttribute('data-name'), row.getAttribute('data-avatar'));
   });
 }
 
@@ -921,6 +950,16 @@ function attachSettingsHandlers() {
   if (byId('back-from-settings')) byId('back-from-settings').onclick = goHome;
   if (byId('settings-logout')) byId('settings-logout').onclick = logout;
   if (byId('edit-name-btn')) byId('edit-name-btn').onclick = editNameAction;
+
+  const avatarBtn = byId('settings-avatar-btn');
+  const avatarInput = byId('avatar-upload-input');
+  if (avatarBtn && avatarInput) {
+    avatarBtn.onclick = () => avatarInput.click();
+    avatarInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) uploadAvatarAction(file);
+    };
+  }
 
   document.querySelectorAll('.theme-card').forEach(card => {
     card.onclick = () => setTheme(card.getAttribute('data-t'));

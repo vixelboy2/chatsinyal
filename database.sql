@@ -6,6 +6,7 @@
 CREATE TABLE IF NOT EXISTS users (
     id text PRIMARY KEY,
     name text NOT NULL,
+    avatar_url text,
     created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS messages (
 -- MIGRATION SCRIPT (RUN THIS IF YOU ALREADY CREATED TABLES)
 -- =======================================================
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at timestamp with time zone;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text;
 
 -- 4. Set up Row Level Security (RLS) policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
