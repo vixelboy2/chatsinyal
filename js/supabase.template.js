@@ -25,6 +25,11 @@ export const db = {
     return data;
   },
 
+  async updateUserName(id, newName) {
+    const { error } = await supabase.from('users').update({ name: newName }).eq('id', id);
+    if (error) throw error;
+  },
+
   async addFollow(followerId, followedId) {
     const { error } = await supabase.from('follows').insert([{ follower_id: followerId, followed_id: followedId }]);
     // Ignore duplicate errors if they already follow each other

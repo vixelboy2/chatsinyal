@@ -30,7 +30,8 @@ const ICONS = {
   check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
   checkDouble: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 10 11 21 8 18"></polyline></svg>`,
   settings: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
-  checkmark: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+  checkmark: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+  edit: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`
 };
 
 // ============ State ============
@@ -276,6 +277,25 @@ function setSize(size) {
   localStorage.setItem('sinyal_size', size);
   applySettings();
   render();
+}
+
+async function editNameAction() {
+  const newName = prompt("Masukkan nama baru Anda:", state.me.name);
+  if (!newName || newName.trim() === '' || newName === state.me.name) return;
+  
+  const oldName = state.me.name;
+  state.me.name = newName.trim();
+  render(); // Optimistic update
+  
+  try {
+    await db.updateUserName(state.me.id, state.me.name);
+    localStorage.setItem('sinyal_profile', JSON.stringify(state.me));
+  } catch (err) {
+    console.error("Gagal mengganti nama", err);
+    alert("Gagal mengganti nama. Pastikan koneksi internet aktif.");
+    state.me.name = oldName;
+    render();
+  }
 }
 
 async function loadHomeData() {
@@ -714,8 +734,11 @@ function renderSettings() {
     <div class="settings-page">
       <div class="settings-user-card">
         <div class="avatar">${initials(state.me?.name || '?')}</div>
-        <div>
-          <div class="user-name">${escapeHtml(state.me?.name || '')}</div>
+        <div style="flex:1;">
+          <div class="user-name" style="display:flex;align-items:center;gap:8px;">
+            ${escapeHtml(state.me?.name || '')}
+            <button class="icon-btn" id="edit-name-btn" style="padding:4px;border-radius:6px;width:24px;height:24px;">${ICONS.edit}</button>
+          </div>
           <div class="user-id">${formatId(state.me?.id || '')}</div>
         </div>
       </div>
@@ -849,6 +872,7 @@ function attachSettingsHandlers() {
   const byId = id => document.getElementById(id);
   if (byId('back-from-settings')) byId('back-from-settings').onclick = goHome;
   if (byId('settings-logout')) byId('settings-logout').onclick = logout;
+  if (byId('edit-name-btn')) byId('edit-name-btn').onclick = editNameAction;
 
   document.querySelectorAll('.theme-card').forEach(card => {
     card.onclick = () => setTheme(card.getAttribute('data-t'));

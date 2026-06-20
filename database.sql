@@ -39,6 +39,7 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Enable read access for all users" ON users;
 DROP POLICY IF EXISTS "Enable insert access for all users" ON users;
+DROP POLICY IF EXISTS "Enable update access for all users" ON users;
 DROP POLICY IF EXISTS "Enable read access for all follows" ON follows;
 DROP POLICY IF EXISTS "Enable insert access for all follows" ON follows;
 DROP POLICY IF EXISTS "Enable read access for all messages" ON messages;
@@ -47,6 +48,7 @@ DROP POLICY IF EXISTS "Enable update access for all messages" ON messages;
 
 CREATE POLICY "Enable read access for all users" ON users FOR SELECT USING (true);
 CREATE POLICY "Enable insert access for all users" ON users FOR INSERT WITH CHECK (true);
+CREATE POLICY "Enable update access for all users" ON users FOR UPDATE USING (true) WITH CHECK (true);
 
 CREATE POLICY "Enable read access for all follows" ON follows FOR SELECT USING (true);
 CREATE POLICY "Enable insert access for all follows" ON follows FOR INSERT WITH CHECK (true);
