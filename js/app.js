@@ -151,7 +151,7 @@ async function createAccount() {
 async function loginWithId() {
   const idInput = document.getElementById('login-id-input');
   const id = idInput ? idInput.value.replace(/\s+/g, '') : '';
-  if (!/^\\d{6}$/.test(id)) { state.error = 'Masukkan ID 6 digit yang valid.'; render(); return; }
+  if (!/^\d{6}$/.test(id)) { state.error = 'Masukkan ID 6 digit yang valid.'; render(); return; }
   
   state.busy = true; state.error = ''; render();
   
@@ -238,7 +238,7 @@ async function addFriendAction() {
   const input = document.getElementById('add-friend-input');
   const targetId = input ? input.value.replace(/\s+/g, '') : '';
   
-  if (!/^\\d{6}$/.test(targetId)) { state.error = 'Masukkan ID 6 digit yang valid.'; render(); return; }
+  if (!/^\d{6}$/.test(targetId)) { state.error = 'Masukkan ID 6 digit yang valid.'; render(); return; }
   if (targetId === state.me.id) { state.error = 'Tidak bisa menambahkan ID sendiri.'; render(); return; }
 
   state.busy = true; render();
