@@ -28,7 +28,9 @@ const ICONS = {
   send: `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#110d0a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
   empty: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
   check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
-  checkDouble: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 10 11 21 8 18"></polyline></svg>`
+  checkDouble: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 10 11 21 8 18"></polyline></svg>`,
+  settings: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  checkmark: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
 };
 
 // ============ State ============
@@ -49,8 +51,19 @@ let state = {
   subscriptions: [],
   presenceChannel: null,
   onlineUsers: new Set(),
-  unreadCounts: {}
+  unreadCounts: {},
+  settings: {
+    theme: localStorage.getItem('sinyal_theme') || 'sinyal',
+    size: localStorage.getItem('sinyal_size') || 'medium'
+  }
 };
+
+// Apply saved settings on load
+function applySettings() {
+  document.documentElement.setAttribute('data-theme', state.settings.theme);
+  document.documentElement.setAttribute('data-size', state.settings.size);
+}
+applySettings();
 
 // ============ Subscriptions ============
 function clearSubscriptions() {
@@ -243,6 +256,25 @@ async function goHome() {
   state.error = '';
   await loadHomeData();
   setupHomeSubscription();
+  render();
+}
+
+function goSettings() {
+  state.view = 'settings';
+  render();
+}
+
+function setTheme(theme) {
+  state.settings.theme = theme;
+  localStorage.setItem('sinyal_theme', theme);
+  applySettings();
+  render();
+}
+
+function setSize(size) {
+  state.settings.size = size;
+  localStorage.setItem('sinyal_size', size);
+  applySettings();
   render();
 }
 
@@ -591,7 +623,10 @@ function renderHome() {
   return `
     <div class="header fade-in">
       <div class="brand"><span class="dot"></span>SINYAL</div>
-      <button class="icon-btn" id="logout-btn" title="Keluar">${ICONS.logout}</button>
+      <div style="display:flex;gap:8px;">
+        <button class="icon-btn" id="settings-btn" title="Pengaturan">${ICONS.settings}</button>
+        <button class="icon-btn" id="logout-btn" title="Keluar">${ICONS.logout}</button>
+      </div>
     </div>
     <div class="home-id-bar fade-in">
       <div>
@@ -658,6 +693,76 @@ function renderChat() {
     </div>`;
 }
 
+function renderSettings() {
+  const themes = [
+    { id: 'sinyal', name: 'Sinyal' },
+    { id: 'lautmalam', name: 'Laut Malam' },
+    { id: 'siang', name: 'Siang Bersih' }
+  ];
+  const sizes = [
+    { id: 'small', label: 'Kecil', icon: 'Aa' },
+    { id: 'medium', label: 'Sedang', icon: 'Aa' },
+    { id: 'large', label: 'Besar', icon: 'Aa' }
+  ];
+
+  return `
+    <div class="header fade-in">
+      <button class="icon-btn" id="back-from-settings">${ICONS.back}</button>
+      <div class="brand" style="flex:1;justify-content:center;">PENGATURAN</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="settings-page">
+      <div class="settings-user-card">
+        <div class="avatar">${initials(state.me?.name || '?')}</div>
+        <div>
+          <div class="user-name">${escapeHtml(state.me?.name || '')}</div>
+          <div class="user-id">${formatId(state.me?.id || '')}</div>
+        </div>
+      </div>
+
+      <div class="settings-divider" style="margin-top:20px;"></div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Tema Tampilan</div>
+        <div class="theme-grid">
+          ${themes.map(t => `
+            <div class="theme-card ${state.settings.theme === t.id ? 'active' : ''}" data-t="${t.id}" id="theme-${t.id}">
+              <div class="theme-card-preview">
+                <div class="theme-preview-bubble"></div>
+                <div class="theme-preview-bubble mine"></div>
+                <div class="theme-preview-bubble"></div>
+              </div>
+              <div class="theme-card-label">${t.name}</div>
+              <div class="theme-check">${ICONS.checkmark}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Ukuran Tampilan</div>
+        <div class="size-options">
+          ${sizes.map(s => `
+            <button class="size-btn ${state.settings.size === s.id ? 'active' : ''}" data-s="${s.id}" id="size-${s.id}">
+              <span class="size-btn-icon">${s.icon}</span>
+              <span class="size-btn-label">${s.label}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-section">
+        <button class="btn btn-ghost btn-block" id="settings-logout" style="gap:10px;">
+          ${ICONS.logout} Keluar dari Akun
+        </button>
+      </div>
+    </div>`;
+}
+
 function render() {
   const app = document.getElementById('app');
   if (state.view === 'loading') {
@@ -668,6 +773,9 @@ function render() {
   } else if (state.view === 'home') {
     app.innerHTML = renderHome();
     attachHomeHandlers();
+  } else if (state.view === 'settings') {
+    app.innerHTML = renderSettings();
+    attachSettingsHandlers();
   } else if (state.view === 'chat') {
     if (app.querySelector(`.chat-header[data-id="${state.activeChat.id}"]`)) {
       // Partial update to avoid flickering and losing input focus
@@ -682,7 +790,6 @@ function render() {
         statusEl.innerHTML = `<span class="status-dot ${isOnline ? 'online' : ''}" style="margin-right:4px;"></span>${isOnline ? 'Online' : 'Offline'}`;
       }
       
-      // Update send button state
       const btn = document.getElementById('send-btn');
       if (btn) btn.disabled = !state.draftText.trim();
       
@@ -717,6 +824,7 @@ function attachOnboardingHandlers() {
 function attachHomeHandlers() {
   const byId = id => document.getElementById(id);
   if (byId('logout-btn')) byId('logout-btn').onclick = logout;
+  if (byId('settings-btn')) byId('settings-btn').onclick = goSettings;
   if (byId('copy-home-id')) byId('copy-home-id').onclick = copyMyId;
   if (byId('toggle-add-panel')) byId('toggle-add-panel').onclick = toggleAddPanel;
   if (byId('submit-add-friend')) byId('submit-add-friend').onclick = addFriendAction;
@@ -734,6 +842,20 @@ function attachHomeHandlers() {
   
   document.querySelectorAll('.open-chat').forEach(row => {
     row.onclick = () => openChat(row.getAttribute('data-id'), row.getAttribute('data-name'));
+  });
+}
+
+function attachSettingsHandlers() {
+  const byId = id => document.getElementById(id);
+  if (byId('back-from-settings')) byId('back-from-settings').onclick = goHome;
+  if (byId('settings-logout')) byId('settings-logout').onclick = logout;
+
+  document.querySelectorAll('.theme-card').forEach(card => {
+    card.onclick = () => setTheme(card.getAttribute('data-t'));
+  });
+
+  document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.onclick = () => setSize(btn.getAttribute('data-s'));
   });
 }
 
