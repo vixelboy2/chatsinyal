@@ -377,22 +377,31 @@ async function refreshMessages() {
 }
 
 async function sendMessage() {
-  const text = state.draftText.trim();
+  const input = document.getElementById('composer-input');
+  const text = (input ? input.value : state.draftText).trim();
   if (!text || !state.activeChat || state.busy) return;
   
   state.busy = true;
   state.draftText = '';
   
+  // Clear the input field immediately without re-rendering
+  if (input) input.value = '';
+  const sendBtn = document.getElementById('send-btn');
+  if (sendBtn) sendBtn.disabled = true;
+  
   const tempId = 'temp-' + Date.now();
   const tempMsg = { id: tempId, from: state.me.id, text, ts: new Date().toISOString(), read_at: null };
   state.messages.push(tempMsg);
-  render();
-  scrollMessagesToBottom();
+  
+  // Only update the messages area, not the whole screen
+  const msgContainer = document.getElementById('messages-container');
+  if (msgContainer) {
+    msgContainer.innerHTML = getChatMessagesHtml();
+    scrollMessagesToBottom();
+  }
 
   try {
-    // We send message. The subscription will NOT fetch our own inserts because filter is receiver_id=eq.me.id
-    // But since we want to know the real ID for read receipts, we should get it
-    const { data, error } = await supabase.from('messages').insert([{
+    const { data } = await supabase.from('messages').insert([{
       sender_id: state.me.id,
       receiver_id: state.activeChat.id,
       text: text
@@ -401,13 +410,18 @@ async function sendMessage() {
     if (data) {
       const msgIndex = state.messages.findIndex(m => m.id === tempId);
       if (msgIndex !== -1) state.messages[msgIndex].id = data.id;
+      // Update only the messages area after getting real ID
+      if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
     }
   } catch (e) {
     console.error("Failed to send message", e);
   }
   
   state.busy = false;
-  render();
+  // Focus input back
+  if (input) {
+    input.focus();
+  }
 }
 
 // ============ Renderers ============
