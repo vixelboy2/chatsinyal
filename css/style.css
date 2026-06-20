@@ -592,6 +592,20 @@ input.field::placeholder { color: var(--text-muted); }
   z-index: 10;
 }
 
+.chat-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: absolute;
+  top: 76px;
+  left: 0;
+  right: 0;
+  z-index: 9;
+}
+
 .icon-btn {
   background: none;
   border: none;

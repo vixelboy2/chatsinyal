@@ -135,5 +135,28 @@ export const db = {
       .is('read_at', null);
     
     if (error) console.error("Error marking read", error);
+  },
+
+  async clearChat(user1, user2) {
+    const { error } = await supabase.from('messages')
+      .delete()
+      .or(`and(sender_id.eq.${user1},receiver_id.eq.${user2}),and(sender_id.eq.${user2},receiver_id.eq.${user1})`);
+    if (error) throw error;
+  },
+
+  async blockUser(blockerId, blockedId) {
+    const { error } = await supabase.from('blocks').insert([{ blocker_id: blockerId, blocked_id: blockedId }]);
+    if (error && error.code !== '23505') throw error;
+  },
+
+  async unblockUser(blockerId, blockedId) {
+    const { error } = await supabase.from('blocks').delete().match({ blocker_id: blockerId, blocked_id: blockedId });
+    if (error) throw error;
+  },
+
+  async getBlocks(userId) {
+    const { data, error } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', userId);
+    if (error) throw error;
+    return data.map(b => b.blocked_id);
   }
 };

@@ -38,7 +38,13 @@ const ICONS = {
   checkDouble: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 10 11 21 8 18"></polyline></svg>`,
   settings: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   checkmark: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
-  edit: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`
+  edit: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
+  moreVert: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>`,
+  search: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  trash: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
+  shield: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+  user: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
 };
 
 // ============ State ============
@@ -61,6 +67,11 @@ let state = {
   onlineUsers: new Set(),
   unreadCounts: {},
   showProfileModal: false,
+  showChatMenu: false,
+  showChatSearch: false,
+  searchQuery: '',
+  blockedByMe: new Set(),
+  chatWallpaper: JSON.parse(localStorage.getItem('sinyal_wallpaper') || '{}'),
   settings: {
     theme: localStorage.getItem('sinyal_theme') || 'sinyal',
     size: localStorage.getItem('sinyal_size') || 'medium'
@@ -312,12 +323,15 @@ async function loadHomeData() {
   try {
     const { mutualIds, pendingIds, incomingIds } = await db.getMutuals(state.me.id);
     
-    const [mutualUsers, pendingUsers, incomingUsers, unreadRes] = await Promise.all([
+    const [mutualUsers, pendingUsers, incomingUsers, unreadRes, blocksRes] = await Promise.all([
       db.getUsersByIds(mutualIds),
       db.getUsersByIds(pendingIds),
       db.getUsersByIds(incomingIds),
-      supabase.from('messages').select('sender_id').eq('receiver_id', state.me.id).is('read_at', null)
+      supabase.from('messages').select('sender_id').eq('receiver_id', state.me.id).is('read_at', null),
+      db.getBlocks(state.me.id)
     ]);
+    
+    state.blockedByMe = new Set(blocksRes || []);
     
     // Count unread messages
     state.unreadCounts = {};
@@ -464,6 +478,100 @@ function toggleAvatarActionMenu() {
     };
     document.getElementById('action-cancel-avatar').onclick = () => {
       document.getElementById('avatar-action-menu-overlay').remove();
+    };
+  }
+}
+
+// ============ Chat Actions ============
+
+function toggleChatSearch() {
+  state.showChatSearch = !state.showChatSearch;
+  if (!state.showChatSearch) {
+    state.searchQuery = '';
+  }
+  render();
+}
+
+function toggleChatMenu() {
+  let menu = document.getElementById('chat-action-menu-overlay');
+  if (menu) {
+    menu.remove();
+  } else {
+    const isBlocked = state.blockedByMe.has(state.activeChat.id);
+    const html = `
+      <div class="modal-overlay" id="chat-action-menu-overlay">
+        <div class="avatar-action-menu fade-in">
+          <button class="avatar-action-btn" id="action-wallpaper">${ICONS.image} Atur Wallpaper</button>
+          <button class="avatar-action-btn" id="action-view-user">${ICONS.user} Lihat User</button>
+          <button class="avatar-action-btn" id="action-search-chat">${ICONS.search} Cari Pesan</button>
+          <button class="avatar-action-btn ${isBlocked ? '' : 'danger'}" id="action-block-user">${ICONS.shield} ${isBlocked ? 'Buka Blokir' : 'Blokir'}</button>
+          <button class="avatar-action-btn danger" id="action-clear-chat">${ICONS.trash} Bersihkan Obrolan</button>
+          <button class="avatar-action-btn" id="action-cancel-chat-menu" style="justify-content:center;">Batal</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('app').insertAdjacentHTML('beforeend', html);
+    
+    document.getElementById('action-wallpaper').onclick = () => {
+      document.getElementById('chat-action-menu-overlay').remove();
+      const newWallpaper = prompt("Masukkan URL gambar untuk wallpaper (kosongkan untuk hapus):", state.chatWallpaper[state.activeChat.id] || "");
+      if (newWallpaper !== null) {
+        if (newWallpaper.trim() === '') {
+          delete state.chatWallpaper[state.activeChat.id];
+        } else {
+          state.chatWallpaper[state.activeChat.id] = newWallpaper.trim();
+        }
+        localStorage.setItem('sinyal_wallpaper', JSON.stringify(state.chatWallpaper));
+        render();
+      }
+    };
+    
+    document.getElementById('action-view-user').onclick = () => {
+      document.getElementById('chat-action-menu-overlay').remove();
+      toggleProfileModal();
+    };
+    
+    document.getElementById('action-search-chat').onclick = () => {
+      document.getElementById('chat-action-menu-overlay').remove();
+      toggleChatSearch();
+    };
+    
+    document.getElementById('action-block-user').onclick = async () => {
+      document.getElementById('chat-action-menu-overlay').remove();
+      state.busy = true; render();
+      try {
+        if (isBlocked) {
+          await db.unblockUser(state.me.id, state.activeChat.id);
+          state.blockedByMe.delete(state.activeChat.id);
+        } else {
+          await db.blockUser(state.me.id, state.activeChat.id);
+          state.blockedByMe.add(state.activeChat.id);
+        }
+      } catch(e) {
+        alert("Gagal mengubah status blokir: " + e.message);
+      } finally {
+        state.busy = false;
+        render();
+      }
+    };
+    
+    document.getElementById('action-clear-chat').onclick = async () => {
+      document.getElementById('chat-action-menu-overlay').remove();
+      if (!confirm("Yakin ingin menghapus semua pesan dalam obrolan ini?")) return;
+      state.busy = true; render();
+      try {
+        await db.clearChat(state.me.id, state.activeChat.id);
+        state.messages = [];
+      } catch(e) {
+        alert("Gagal menghapus pesan: " + e.message);
+      } finally {
+        state.busy = false;
+        render();
+      }
+    };
+    
+    document.getElementById('action-cancel-chat-menu').onclick = () => {
+      document.getElementById('chat-action-menu-overlay').remove();
     };
   }
 }
@@ -846,7 +954,14 @@ function renderHome() {
 
 function getChatMessagesHtml() {
   const c = state.activeChat;
-  return state.messages.length ? state.messages.map(m => {
+  let msgs = state.messages;
+  
+  if (state.searchQuery.trim()) {
+    const q = state.searchQuery.toLowerCase();
+    msgs = msgs.filter(m => m.text.toLowerCase().includes(q));
+  }
+
+  return msgs.length ? msgs.map(m => {
     const mine = m.from === state.me.id;
     let ticks = '';
     if (mine) {
@@ -862,31 +977,55 @@ function getChatMessagesHtml() {
       <div style="margin-bottom:16px; display:flex; justify-content:center;">
         <div class="empty-icon" style="width:64px;height:64px;">${ICONS.empty}</div>
       </div>
-      Belum ada pesan dengan <b>${escapeHtml(c.name)}</b>.<br>Kirim pesan pertama untuk memulai percakapan aman.
+      ${state.searchQuery.trim() ? `Tidak ditemukan pesan dengan kata <b>"${escapeHtml(state.searchQuery)}"</b>` : `Belum ada pesan dengan <b>${escapeHtml(c.name)}</b>.<br>Kirim pesan pertama untuk memulai percakapan aman.`}
     </div>`;
 }
 
 function renderChat() {
   const c = state.activeChat;
   const isOnline = state.onlineUsers.has(c.id);
+  const isBlocked = state.blockedByMe.has(c.id);
+  
+  const wallpaperBg = state.chatWallpaper[c.id] || '';
+  const wallpaperStyle = wallpaperBg ? `background-image: url('${escapeHtml(wallpaperBg)}'); background-size: cover; background-position: center;` : '';
+
+  const searchBarHtml = state.showChatSearch ? `
+    <div class="chat-search-bar fade-in">
+      <input type="text" class="field" id="chat-search-input" placeholder="Cari pesan..." value="${escapeHtml(state.searchQuery)}" autofocus>
+      <button class="icon-btn" id="close-chat-search">${ICONS.back}</button>
+    </div>
+  ` : '';
 
   return `
-    <div class="chat-header fade-in" data-id="${c.id}" id="chat-header-area" style="cursor: pointer;">
+    <div class="chat-header fade-in" data-id="${c.id}" id="chat-header-area" style="cursor: pointer; z-index: 10;">
       <button class="icon-btn" id="back-home-btn" style="z-index: 2;">${ICONS.back}</button>
       ${renderAvatarHtml(c.name, c.avatar_url)}
-      <div>
+      <div style="flex:1;">
         <div class="chat-name">${escapeHtml(c.name)}</div>
         <div class="chat-status" style="color: ${isOnline ? '#22c55e' : 'var(--text-muted)'};">
           <span class="status-dot ${isOnline ? 'online' : ''}" style="margin-right:4px;"></span>
           ${isOnline ? 'Online' : 'Offline'}
         </div>
       </div>
+      <button class="icon-btn" id="chat-menu-btn" style="z-index: 2;">${ICONS.moreVert}</button>
     </div>
-    <div class="messages" id="messages-container">${getChatMessagesHtml()}</div>
-    <div class="composer fade-in">
-      <input class="field" id="composer-input" placeholder="Tulis pesan..." value="${escapeHtml(state.draftText)}" autocomplete="off">
-      <button class="send-btn" id="send-btn" ${!state.draftText.trim() ? 'disabled' : ''}>${ICONS.send}</button>
+    ${searchBarHtml}
+    
+    <div class="messages" id="messages-container" style="${wallpaperStyle}">
+      ${getChatMessagesHtml()}
     </div>
+    
+    ${isBlocked ? `
+      <div class="composer fade-in" style="justify-content:center; padding: 20px;">
+        <div style="color: var(--danger); font-size: 14px; font-weight: 600;">Anda telah memblokir pengguna ini.</div>
+        <button class="btn btn-ghost btn-sm" id="unblock-btn" style="margin-left: 12px;">Buka Blokir</button>
+      </div>
+    ` : `
+      <div class="composer fade-in">
+        <input class="field" id="composer-input" placeholder="Tulis pesan..." value="${escapeHtml(state.draftText)}" autocomplete="off">
+        <button class="send-btn" id="send-btn" ${!state.draftText.trim() ? 'disabled' : ''}>${ICONS.send}</button>
+      </div>
+    `}
   `;
 }
 
@@ -1096,7 +1235,7 @@ function attachChatHandlers() {
   const input = byId('composer-input');
   const btn = byId('send-btn');
   if (input) {
-    if (!state.showProfileModal) {
+    if (!state.showProfileModal && !state.showChatSearch) {
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
     }
@@ -1105,6 +1244,40 @@ function attachChatHandlers() {
       if (btn) btn.disabled = !state.draftText.trim();
     };
     input.onkeydown = e => { if (e.key === 'Enter') sendMessage(); };
+  }
+  
+  if (byId('chat-menu-btn')) {
+    byId('chat-menu-btn').onclick = (e) => {
+      e.stopPropagation();
+      toggleChatMenu();
+    };
+  }
+  
+  if (byId('close-chat-search')) {
+    byId('close-chat-search').onclick = toggleChatSearch;
+  }
+  
+  if (byId('chat-search-input')) {
+    byId('chat-search-input').oninput = (e) => {
+      state.searchQuery = e.target.value;
+      const msgContainer = document.getElementById('messages-container');
+      if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
+    };
+  }
+  
+  if (byId('unblock-btn')) {
+    byId('unblock-btn').onclick = async () => {
+      state.busy = true; render();
+      try {
+        await db.unblockUser(state.me.id, state.activeChat.id);
+        state.blockedByMe.delete(state.activeChat.id);
+      } catch(e) {
+        alert("Gagal membuka blokir.");
+      } finally {
+        state.busy = false;
+        render();
+      }
+    };
   }
 }
 

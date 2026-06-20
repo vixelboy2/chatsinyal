@@ -67,3 +67,17 @@ COMMIT;
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE follows;
 ALTER PUBLICATION supabase_realtime ADD TABLE users;
+
+-- 6. Table for user blocks
+CREATE TABLE public.blocks (
+  id uuid default gen_random_uuid() primary key,
+  blocker_id text references public.users(id) on delete cascade,
+  blocked_id text references public.users(id) on delete cascade,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(blocker_id, blocked_id)
+);
+
+ALTER TABLE public.blocks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for all blocks" ON blocks FOR ALL USING (true) WITH CHECK (true);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE blocks;
