@@ -421,6 +421,111 @@ async function uploadAvatarAction(file) {
   }
 }
 
+async function removeAvatarAction() {
+  if (!confirm("Hapus foto profil?")) return;
+  state.busy = true; render();
+  try {
+    await db.removeAvatar(state.me.id);
+    state.me.avatar_url = null;
+    localStorage.setItem('sinyal_profile', JSON.stringify(state.me));
+  } catch(e) {
+    alert("Gagal menghapus foto: " + e.message);
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+let cropperInstance = null;
+
+function toggleAvatarActionMenu() {
+  let menu = document.getElementById('avatar-action-menu-overlay');
+  if (menu) {
+    menu.remove();
+  } else {
+    const html = `
+      <div class="modal-overlay" id="avatar-action-menu-overlay">
+        <div class="avatar-action-menu fade-in">
+          <button class="avatar-action-btn" id="action-change-avatar">${ICONS.edit} Ubah Foto</button>
+          <button class="avatar-action-btn danger" id="action-remove-avatar">${ICONS.logout} Hapus Foto</button>
+          <button class="avatar-action-btn" id="action-cancel-avatar" style="justify-content:center;">Batal</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('app').insertAdjacentHTML('beforeend', html);
+    
+    document.getElementById('action-change-avatar').onclick = () => {
+      document.getElementById('avatar-action-menu-overlay').remove();
+      document.getElementById('avatar-upload-input').click();
+    };
+    document.getElementById('action-remove-avatar').onclick = () => {
+      document.getElementById('avatar-action-menu-overlay').remove();
+      removeAvatarAction();
+    };
+    document.getElementById('action-cancel-avatar').onclick = () => {
+      document.getElementById('avatar-action-menu-overlay').remove();
+    };
+  }
+}
+
+function showCropperModal(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    const html = `
+      <div class="modal-overlay" id="cropper-modal-overlay" style="z-index:200;">
+        <div class="cropper-modal-box fade-in">
+          <div class="cropper-container-wrapper">
+            <img id="cropper-image" src="${dataUrl}" style="max-width:100%; display:block;">
+          </div>
+          <div class="cropper-actions">
+            <button class="btn btn-ghost" id="cropper-cancel" style="flex:1;">Batal</button>
+            <button class="btn btn-primary" id="cropper-apply" style="flex:1;">Simpan</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('app').insertAdjacentHTML('beforeend', html);
+    
+    const image = document.getElementById('cropper-image');
+    cropperInstance = new window.Cropper(image, {
+      aspectRatio: 1,
+      viewMode: 1,
+      dragMode: 'move',
+      autoCropArea: 1,
+      cropBoxMovable: false,
+      cropBoxResizable: false,
+      guides: false,
+      center: false,
+      highlight: false,
+      background: false
+    });
+    
+    document.getElementById('cropper-cancel').onclick = () => {
+      if (cropperInstance) cropperInstance.destroy();
+      document.getElementById('cropper-modal-overlay').remove();
+      document.getElementById('avatar-upload-input').value = ""; // Reset file input
+    };
+    
+    document.getElementById('cropper-apply').onclick = () => {
+      if (!cropperInstance) return;
+      cropperInstance.getCroppedCanvas({
+        width: 300,
+        height: 300,
+      }).toBlob((blob) => {
+        if (!blob) return;
+        blob.name = 'avatar.png';
+        document.getElementById('cropper-modal-overlay').remove();
+        cropperInstance.destroy();
+        cropperInstance = null;
+        document.getElementById('avatar-upload-input').value = ""; // Reset file input
+        uploadAvatarAction(blob);
+      }, 'image/png');
+    };
+  };
+  reader.readAsDataURL(file);
+}
+
 function copyProfileId() {
   if (!state.activeChat) return;
   const text = state.activeChat.id;
@@ -954,10 +1059,10 @@ function attachSettingsHandlers() {
   const avatarBtn = byId('settings-avatar-btn');
   const avatarInput = byId('avatar-upload-input');
   if (avatarBtn && avatarInput) {
-    avatarBtn.onclick = () => avatarInput.click();
+    avatarBtn.onclick = () => toggleAvatarActionMenu();
     avatarInput.onchange = (e) => {
       const file = e.target.files[0];
-      if (file) uploadAvatarAction(file);
+      if (file) showCropperModal(file);
     };
   }
 

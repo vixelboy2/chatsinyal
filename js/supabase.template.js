@@ -51,6 +51,13 @@ export const db = {
     return data.publicUrl;
   },
 
+  async removeAvatar(id) {
+    const { error } = await supabase.from('users')
+      .update({ avatar_url: null })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
   async addFollow(followerId, followedId) {
     const { error } = await supabase.from('follows').insert([{ follower_id: followerId, followed_id: followedId }]);
     // Ignore duplicate errors if they already follow each other
