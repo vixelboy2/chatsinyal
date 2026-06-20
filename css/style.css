@@ -950,3 +950,75 @@ input.field::placeholder { color: #5a5246; }
 
 .settings-user-card .user-name { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
 .settings-user-card .user-id { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 2px; }
+
+/* ---------- Profile Modal ---------- */
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.profile-modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  position: relative;
+}
+
+.profile-modal .close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--surface-2);
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.profile-modal .close-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.profile-modal .avatar {
+  width: 80px;
+  height: 80px;
+  font-size: 28px;
+  margin: 0 auto 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.profile-modal .profile-name {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.profile-modal .profile-id {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+}

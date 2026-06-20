@@ -53,6 +53,7 @@ let state = {
   presenceChannel: null,
   onlineUsers: new Set(),
   unreadCounts: {},
+  showProfileModal: false,
   settings: {
     theme: localStorage.getItem('sinyal_theme') || 'sinyal',
     size: localStorage.getItem('sinyal_size') || 'medium'
@@ -396,6 +397,52 @@ function copyMyId() {
   }
 }
 
+function copyProfileId() {
+  if (!state.activeChat) return;
+  const text = state.activeChat.id;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+  const el = document.getElementById('copy-profile-feedback');
+  if (el) { 
+    el.textContent = 'Tersalin!'; 
+    setTimeout(() => { if (el) el.textContent = 'Salin ID'; }, 1500); 
+  }
+}
+
+function toggleProfileModal() {
+  state.showProfileModal = !state.showProfileModal;
+  const overlay = document.getElementById('profile-modal-overlay');
+  
+  if (state.showProfileModal) {
+    if (!overlay && state.activeChat) {
+      const c = state.activeChat;
+      const modalHtml = `
+        <div class="modal-overlay" id="profile-modal-overlay">
+          <div class="profile-modal fade-in" id="profile-modal-box">
+            <button class="close-btn" id="close-profile-btn">✕</button>
+            <div class="avatar">${initials(c.name)}</div>
+            <div class="profile-name">${escapeHtml(c.name)}</div>
+            <div class="profile-id">${formatId(c.id)}</div>
+            <button class="btn btn-primary btn-block" id="copy-profile-btn" style="margin-top:16px;">
+              <span id="copy-profile-feedback">Salin ID</span>
+            </button>
+          </div>
+        </div>
+      `;
+      document.getElementById('app').insertAdjacentHTML('beforeend', modalHtml);
+      
+      document.getElementById('close-profile-btn').onclick = toggleProfileModal;
+      document.getElementById('copy-profile-btn').onclick = copyProfileId;
+      document.getElementById('profile-modal-overlay').onclick = (e) => {
+        if (e.target.id === 'profile-modal-overlay') toggleProfileModal();
+      };
+    }
+  } else {
+    if (overlay) overlay.remove();
+  }
+}
+
 // ============ Chat ============
 async function openChat(id, name) {
   state.view = 'chat';
@@ -695,8 +742,8 @@ function renderChat() {
   const isOnline = state.onlineUsers.has(c.id);
 
   return `
-    <div class="chat-header fade-in" data-id="${c.id}">
-      <button class="icon-btn" id="back-home-btn">${ICONS.back}</button>
+    <div class="chat-header fade-in" data-id="${c.id}" id="chat-header-area" style="cursor: pointer;">
+      <button class="icon-btn" id="back-home-btn" style="z-index: 2;">${ICONS.back}</button>
       <div class="avatar">${initials(c.name)}</div>
       <div>
         <div class="chat-name">${escapeHtml(c.name)}</div>
@@ -710,7 +757,8 @@ function renderChat() {
     <div class="composer fade-in">
       <input class="field" id="composer-input" placeholder="Tulis pesan..." value="${escapeHtml(state.draftText)}" autocomplete="off">
       <button class="send-btn" id="send-btn" ${!state.draftText.trim() ? 'disabled' : ''}>${ICONS.send}</button>
-    </div>`;
+    </div>
+  `;
 }
 
 function renderSettings() {
@@ -885,14 +933,29 @@ function attachSettingsHandlers() {
 
 function attachChatHandlers() {
   const byId = id => document.getElementById(id);
-  if (byId('back-home-btn')) byId('back-home-btn').onclick = goHome;
+  
+  if (byId('back-home-btn')) {
+    byId('back-home-btn').onclick = (e) => {
+      e.stopPropagation(); // prevent opening modal
+      goHome();
+    };
+  }
+  
+  if (byId('chat-header-area')) {
+    byId('chat-header-area').onclick = () => {
+      if (!state.showProfileModal) toggleProfileModal();
+    };
+  }
+  
   if (byId('send-btn')) byId('send-btn').onclick = sendMessage;
   
   const input = byId('composer-input');
   const btn = byId('send-btn');
   if (input) {
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+    if (!state.showProfileModal) {
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
     input.oninput = e => { 
       state.draftText = e.target.value; 
       if (btn) btn.disabled = !state.draftText.trim();
