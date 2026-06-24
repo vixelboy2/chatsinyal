@@ -1282,24 +1282,20 @@ function renderHome() {
         <button class="icon-btn" id="logout-btn" title="Keluar">${ICONS.logout}</button>
       </div>
     </div>
-    <div class="home-id-bar fade-in">
-      <div>
-        <div class="idlabel">ID KAMU</div>
-        <div class="idtext">${formatId(state.me.id)}</div>
-      </div>
-      <button class="btn btn-ghost btn-sm" id="copy-home-id"><span id="copy-feedback">Salin</span></button>
-    </div>
-    <div class="scroll-area fade-in">
-      <div style="padding:0 24px;">
-        <button class="btn btn-primary btn-block" id="toggle-add-panel" style="margin-top:12px; background: var(--surface-3); color: var(--text); border: 1px dashed var(--line); box-shadow: none;">
-          ${state.showAddPanel ? 'Tutup Panel' : '+ Tambah Teman'}
-        </button>
-      </div>
-      <div style="margin-top:12px;">${addPanel}</div>
+    <div class="scroll-area fade-in" style="position:relative;">
+      <div style="margin-top:8px;">${addPanel}</div>
       ${incomingHtml}
       ${mutualHtml}
       ${pendingHtml}
-    </div>`;
+    </div>
+    <button class="fab-btn ${state.showAddPanel ? 'fab-btn-close' : ''}" id="toggle-add-panel" title="${state.showAddPanel ? 'Tutup' : 'Tambah Teman'}">
+      ${state.showAddPanel
+        ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+        : `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+      }
+    </button>
+  `;
+
 }
 
 window.toggleReactionMenu = function(msgId, event) {
