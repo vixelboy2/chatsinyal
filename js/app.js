@@ -1588,6 +1588,12 @@ function renderSettings() {
 
       <div class="settings-divider"></div>
 
+      <div class="settings-section" id="install-pwa-container" style="display:none; padding-bottom:0;">
+        <button class="btn btn-primary btn-block" id="install-pwa-btn" style="gap:10px; margin-bottom:16px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Install Aplikasi Sinyal
+        </button>
+      </div>
+
       <div class="settings-section">
         <button class="btn btn-ghost btn-block" id="settings-logout" style="gap:10px;">
           ${ICONS.logout} Keluar dari Akun
@@ -1756,6 +1762,20 @@ function attachSettingsHandlers() {
   document.querySelectorAll('.size-btn').forEach(btn => {
     btn.onclick = () => setSize(btn.getAttribute('data-s'));
   });
+
+  const installBtn = byId('install-pwa-btn');
+  const installContainer = byId('install-pwa-container');
+  if (window.deferredPrompt && installContainer && installBtn) {
+    installContainer.style.display = 'block';
+    installBtn.onclick = async () => {
+      window.deferredPrompt.prompt();
+      const { outcome } = await window.deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        installContainer.style.display = 'none';
+      }
+      window.deferredPrompt = null;
+    };
+  }
 }
 
 function attachChatHandlers() {
@@ -1829,6 +1849,18 @@ function scrollMessagesToBottom() {
   const el = document.getElementById('messages-container');
   if (el) el.scrollTop = el.scrollHeight;
 }
+
+// PWA Installation handling
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.deferredPrompt = e;
+  
+  // If settings page is already open, show the button immediately
+  const installContainer = document.getElementById('install-pwa-container');
+  if (installContainer) {
+    installContainer.style.display = 'block';
+  }
+});
 
 // Start app
 document.addEventListener('DOMContentLoaded', init);
