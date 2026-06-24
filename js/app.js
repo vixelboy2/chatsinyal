@@ -149,17 +149,14 @@ function setupHomeSubscription() {
         else render();
       });
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
-      loadHomeData().then(() => {
-        if (isDesktop()) renderDesktop();
-        else render();
-      });
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${state.me.id}` }, payload => {
-      loadHomeData().then(() => {
-        if (isDesktop()) renderDesktop();
-        else render();
-      });
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, payload => {
+      // Local filter
+      if (payload.new && (payload.new.receiver_id === state.me.id || payload.new.sender_id === state.me.id)) {
+        loadHomeData().then(() => {
+          if (isDesktop()) renderDesktop();
+          else render();
+        });
+      }
     })
     .subscribe();
   
@@ -203,8 +200,8 @@ function setupChatSubscription(chatPartnerId) {
         }, 3000);
       }
     })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
-      if (payload.new.sender_id === chatPartnerId) {
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+      if (payload.new && payload.new.receiver_id === state.me.id && payload.new.sender_id === chatPartnerId) {
         db.markMessagesAsRead(chatPartnerId, state.me.id);
         state.messages.push({
           id: payload.new.id,
@@ -220,8 +217,11 @@ function setupChatSubscription(chatPartnerId) {
         refreshChatUI();
       }
     })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${state.me.id}` }, payload => {
-      if (payload.new.receiver_id === chatPartnerId) {
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
+      if (!payload.new) return;
+      
+      // If I sent it, and receiver is partner
+      if (payload.new.sender_id === state.me.id && payload.new.receiver_id === chatPartnerId) {
         const msg = state.messages.find(m => m.id === payload.new.id);
         if (msg) {
           msg.read_at = payload.new.read_at;
@@ -231,9 +231,9 @@ function setupChatSubscription(chatPartnerId) {
           refreshMessages().then(() => refreshChatUI());
         }
       }
-    })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
-      if (payload.new.sender_id === chatPartnerId) {
+      
+      // If I received it, from partner
+      if (payload.new.receiver_id === state.me.id && payload.new.sender_id === chatPartnerId) {
         const msg = state.messages.find(m => m.id === payload.new.id);
         if (msg) {
           msg.reactions = payload.new.reactions || {};
