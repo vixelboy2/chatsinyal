@@ -44,7 +44,8 @@ const ICONS = {
   trash: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
   shield: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
   image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
-  user: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
+  user: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  mic: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>`
 };
 
 // ============ State ============
@@ -71,6 +72,16 @@ let state = {
   showChatSearch: false,
   searchQuery: '',
   blockedByMe: new Set(),
+  typingUsers: new Set(),
+  activeChatChannel: null,
+  draftMediaUrl: null,
+  draftMediaFile: null,
+  replyingTo: null,
+  isRecording: false,
+  mediaRecorder: null,
+  audioChunks: [],
+  recordingInterval: null,
+  recordingTime: 0,
   chatWallpaper: JSON.parse(localStorage.getItem('sinyal_wallpaper') || '{}'),
   settings: {
     theme: localStorage.getItem('sinyal_theme') || 'sinyal',
@@ -93,6 +104,11 @@ function clearSubscriptions() {
     supabase.removeChannel(state.presenceChannel);
     state.presenceChannel = null;
   }
+  if (state.activeChatChannel) {
+    supabase.removeChannel(state.activeChatChannel);
+    state.activeChatChannel = null;
+  }
+  state.typingUsers.clear();
 }
 
 function setupPresence() {
@@ -141,31 +157,45 @@ function setupChatSubscription(chatPartnerId) {
   
   if (!state.me) return;
 
-  const channel = supabase.channel('chat_updates')
+  const channelId = `chat_${Math.min(state.me.id, chatPartnerId)}_${Math.max(state.me.id, chatPartnerId)}`;
+  const channel = supabase.channel(channelId)
+    .on('broadcast', { event: 'typing' }, payload => {
+      if (payload.payload.user_id === chatPartnerId) {
+        state.typingUsers.add(chatPartnerId);
+        render();
+        clearTimeout(window.typingTimeout);
+        window.typingTimeout = setTimeout(() => {
+          state.typingUsers.delete(chatPartnerId);
+          render();
+        }, 3000);
+      }
+    })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
       if (payload.new.sender_id === chatPartnerId) {
-        // Automatically mark as read if chat is active
         db.markMessagesAsRead(chatPartnerId, state.me.id);
         state.messages.push({
           id: payload.new.id,
           from: payload.new.sender_id,
           text: payload.new.text,
           ts: payload.new.created_at,
-          read_at: new Date().toISOString()
+          read_at: new Date().toISOString(),
+          media_url: payload.new.media_url,
+          media_type: payload.new.media_type,
+          reply_to: payload.new.reply_to,
+          reactions: payload.new.reactions || {}
         });
         render();
         scrollMessagesToBottom();
       }
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${state.me.id}` }, payload => {
-      // My message was read by partner
       if (payload.new.receiver_id === chatPartnerId) {
         const msg = state.messages.find(m => m.id === payload.new.id);
         if (msg) {
           msg.read_at = payload.new.read_at;
+          msg.reactions = payload.new.reactions || {};
           render();
         } else {
-          // Race condition: UPDATE arrived before INSERT returned the ID. Re-fetch.
           refreshMessages().then(() => {
             render();
             scrollMessagesToBottom();
@@ -173,7 +203,21 @@ function setupChatSubscription(chatPartnerId) {
         }
       }
     })
-    .subscribe();
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
+      // Handle reactions from the other person on their own messages
+      if (payload.new.sender_id === chatPartnerId) {
+        const msg = state.messages.find(m => m.id === payload.new.id);
+        if (msg) {
+          msg.reactions = payload.new.reactions || {};
+          render();
+        }
+      }
+    })
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        state.activeChatChannel = channel;
+      }
+    });
     
   state.subscriptions.push(channel);
 }
@@ -751,7 +795,11 @@ async function refreshMessages() {
       from: m.sender_id,
       text: m.text,
       ts: m.created_at,
-      read_at: m.read_at
+      read_at: m.read_at,
+      media_url: m.media_url,
+      media_type: m.media_type,
+      reply_to: m.reply_to,
+      reactions: m.reactions || {}
     }));
   } catch (e) {
     state.messages = [];
@@ -761,50 +809,206 @@ async function refreshMessages() {
 async function sendMessage() {
   const input = document.getElementById('composer-input');
   const text = (input ? input.value : state.draftText).trim();
-  if (!text || !state.activeChat || state.busy) return;
+  
+  if ((!text && !state.draftMediaUrl) || !state.activeChat || state.busy) return;
   
   state.busy = true;
   state.draftText = '';
   
-  // Clear the input field immediately without re-rendering
+  const mediaFile = state.draftMediaFile;
+  const replyToId = state.replyingTo ? state.replyingTo.id : null;
+  
+  // Clear drafts
+  state.draftMediaUrl = null;
+  state.draftMediaFile = null;
+  state.replyingTo = null;
+  
   if (input) input.value = '';
   const sendBtn = document.getElementById('send-btn');
   if (sendBtn) sendBtn.disabled = true;
   
   const tempId = 'temp-' + Date.now();
-  const tempMsg = { id: tempId, from: state.me.id, text, ts: new Date().toISOString(), read_at: null };
+  const tempMsg = { 
+    id: tempId, 
+    from: state.me.id, 
+    text, 
+    ts: new Date().toISOString(), 
+    read_at: null,
+    media_url: mediaFile ? 'uploading' : null,
+    reply_to: replyToId,
+    reactions: {}
+  };
   state.messages.push(tempMsg);
   
-  // Only update the messages area, not the whole screen
   const msgContainer = document.getElementById('messages-container');
   if (msgContainer) {
     msgContainer.innerHTML = getChatMessagesHtml();
     scrollMessagesToBottom();
+    // Also re-render composer to remove reply/media previews
+    render(); 
   }
 
   try {
-    const { data } = await supabase.from('messages').insert([{
-      sender_id: state.me.id,
-      receiver_id: state.activeChat.id,
-      text: text
-    }]).select().single();
+    let finalMediaUrl = null;
+    let finalMediaType = null;
+    
+    if (mediaFile) {
+      finalMediaUrl = await db.uploadChatMedia(mediaFile);
+      finalMediaType = mediaFile.type;
+    }
+    
+    const data = await db.sendMessage(state.me.id, state.activeChat.id, text, finalMediaUrl, finalMediaType, replyToId);
     
     if (data) {
       const msgIndex = state.messages.findIndex(m => m.id === tempId);
-      if (msgIndex !== -1) state.messages[msgIndex].id = data.id;
-      // Update only the messages area after getting real ID
+      if (msgIndex !== -1) {
+        state.messages[msgIndex].id = data.id;
+        state.messages[msgIndex].media_url = finalMediaUrl;
+        state.messages[msgIndex].media_type = finalMediaType;
+      }
       if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
     }
   } catch (e) {
     console.error("Failed to send message", e);
+    // Remove temp message on failure
+    state.messages = state.messages.filter(m => m.id !== tempId);
+    if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
+    alert("Gagal mengirim pesan.");
   }
   
   state.busy = false;
-  // Focus input back
-  if (input) {
-    input.focus();
+  if (input) input.focus();
+}
+
+async function sendReaction(msgId, emoji) {
+  try {
+    await db.reactToMessage(msgId, emoji, state.me.id);
+    // The realtime subscription will update the UI
+  } catch (err) {
+    console.error("Gagal mengirim reaksi", err);
   }
 }
+
+function setReply(msgId) {
+  const msg = state.messages.find(m => m.id === msgId);
+  if (msg) {
+    state.replyingTo = msg;
+    render();
+    const input = document.getElementById('composer-input');
+    if (input) input.focus();
+  }
+}
+
+function cancelReply() {
+  state.replyingTo = null;
+  render();
+}
+
+function compressAndAttachImage(file) {
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 1200;
+      const MAX_HEIGHT = 1200;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Compress to JPEG with 0.7 quality
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        blob.name = file.name || 'image.jpg';
+        state.draftMediaFile = blob;
+        state.draftMediaUrl = canvas.toDataURL('image/jpeg', 0.7);
+        render();
+      }, 'image/jpeg', 0.7);
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function cancelAttachment() {
+  state.draftMediaFile = null;
+  state.draftMediaUrl = null;
+  render();
+}
+
+window.toggleRecording = async function() {
+  if (state.isRecording) {
+    if (state.mediaRecorder) {
+      state.mediaRecorder.stop();
+    }
+  } else {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      state.mediaRecorder = new MediaRecorder(stream);
+      state.audioChunks = [];
+      
+      state.mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) state.audioChunks.push(e.data);
+      };
+      
+      state.mediaRecorder.onstop = () => {
+        clearInterval(state.recordingInterval);
+        const audioBlob = new Blob(state.audioChunks, { type: 'audio/webm' });
+        // Ensure standard name and type so it sends cleanly
+        audioBlob.name = 'voicenote.webm';
+        stream.getTracks().forEach(track => track.stop());
+        
+        state.isRecording = false;
+        state.mediaRecorder = null;
+        
+        state.draftMediaFile = audioBlob;
+        state.draftMediaUrl = URL.createObjectURL(audioBlob);
+        render();
+      };
+      
+      state.isRecording = true;
+      state.recordingTime = 0;
+      state.mediaRecorder.start();
+      
+      state.recordingInterval = setInterval(() => {
+        state.recordingTime++;
+        const recTimeEl = document.getElementById('recording-time');
+        if (recTimeEl) {
+          const mins = Math.floor(state.recordingTime / 60);
+          const secs = state.recordingTime % 60;
+          recTimeEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+      }, 1000);
+      
+      render();
+    } catch (err) {
+      alert("Tidak dapat mengakses mikrofon. Pastikan izin telah diberikan.");
+      console.error(err);
+    }
+  }
+};
+
+// Update last seen periodically
+setInterval(() => {
+  if (state.me) db.updateLastSeen(state.me.id);
+}, 60000);
+
 
 // ============ Renderers ============
 function waveHtml() {
@@ -998,13 +1202,42 @@ function renderHome() {
     </div>`;
 }
 
+window.toggleReactionMenu = function(msgId, event) {
+  let menu = document.getElementById('reaction-menu-overlay');
+  if (menu) menu.remove();
+  
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+  const html = `
+    <div class="modal-overlay" id="reaction-menu-overlay" onclick="this.remove()">
+      <div class="reaction-menu fade-in" onclick="event.stopPropagation()">
+        ${emojis.map(e => `<button class="reaction-btn" onclick="sendReaction('${msgId}', '${e}'); document.getElementById('reaction-menu-overlay').remove();">${e}</button>`).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('app').insertAdjacentHTML('beforeend', html);
+};
+
+window.handleTyping = function(event) {
+  state.draftText = event.target.value; 
+  const btn = document.getElementById('send-btn');
+  if (btn) btn.disabled = (!state.draftText.trim() && !state.draftMediaUrl);
+  
+  if (state.activeChatChannel && state.me && state.activeChat) {
+    state.activeChatChannel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { user_id: state.me.id }
+    }).catch(e => {}); // ignore errors if channel is not ready
+  }
+};
+
 function getChatMessagesHtml() {
   const c = state.activeChat;
   let msgs = state.messages;
   
   if (state.searchQuery.trim()) {
     const q = state.searchQuery.toLowerCase();
-    msgs = msgs.filter(m => m.text.toLowerCase().includes(q));
+    msgs = msgs.filter(m => (m.text || '').toLowerCase().includes(q));
   }
 
   return msgs.length ? msgs.map(m => {
@@ -1013,10 +1246,52 @@ function getChatMessagesHtml() {
     if (mine) {
       ticks = `<span class="msg-status ${m.read_at ? 'read' : ''}">${m.read_at ? ICONS.checkDouble : ICONS.check}</span>`;
     }
+
+    let mediaHtml = '';
+    if (m.media_url) {
+      if (m.media_url === 'uploading') {
+         mediaHtml = `<div class="msg-media-loading"><div style="opacity:0.6;font-size:12px;">Mengunggah media...</div></div>`;
+      } else if (m.media_type && m.media_type.startsWith('image/')) {
+         mediaHtml = `<img src="${escapeHtml(m.media_url)}" class="msg-image" alt="Image" onclick="window.open(this.src)" />`;
+      } else if (m.media_type && m.media_type.startsWith('audio/')) {
+         mediaHtml = `<audio src="${escapeHtml(m.media_url)}" controls class="msg-audio"></audio>`;
+      } else {
+         mediaHtml = `<a href="${escapeHtml(m.media_url)}" target="_blank" class="msg-file">📄 File Lampiran</a>`;
+      }
+    }
+
+    let replyHtml = '';
+    if (m.reply_to) {
+      const repliedMsg = state.messages.find(msg => msg.id === m.reply_to);
+      if (repliedMsg) {
+         replyHtml = `<div class="msg-reply" onclick="document.getElementById('msg-${repliedMsg.id}')?.scrollIntoView({behavior:'smooth'})">
+           <div class="msg-reply-name">${repliedMsg.from === state.me.id ? 'Anda' : escapeHtml(c.name)}</div>
+           <div class="msg-reply-text">${escapeHtml(repliedMsg.text || '📷 Media')}</div>
+         </div>`;
+      }
+    }
+
+    let reactionsHtml = '';
+    if (m.reactions && Object.keys(m.reactions).length > 0) {
+       reactionsHtml = `<div class="msg-reactions">
+         ${Object.entries(m.reactions).map(([emoji, users]) => `
+           <span class="reaction-badge" onclick="sendReaction('${m.id}', '${emoji}')">${emoji} <small>${users.length}</small></span>
+         `).join('')}
+       </div>`;
+    }
+
     return `
-      <div class="msg ${mine ? 'msg-mine' : 'msg-theirs'}">
-        ${escapeHtml(m.text)}
-        <div class="msg-time">${fmtTime(m.ts)} ${ticks}</div>
+      <div class="msg-row ${mine ? 'msg-row-mine' : 'msg-row-theirs'}" id="msg-${m.id}">
+        ${!mine ? `<button class="icon-btn reply-btn" onclick="setReply('${m.id}')" title="Balas" style="margin-right:4px;opacity:0.5;">${ICONS.back}</button>` : ''}
+        <div class="msg ${mine ? 'msg-mine' : 'msg-theirs'}" 
+             oncontextmenu="event.preventDefault(); toggleReactionMenu('${m.id}', event)">
+          ${replyHtml}
+          ${mediaHtml}
+          ${m.text ? `<div>${escapeHtml(m.text)}</div>` : ''}
+          <div class="msg-time">${fmtTime(m.ts)} ${ticks}</div>
+          ${reactionsHtml}
+        </div>
+        ${mine ? `<button class="icon-btn reply-btn" onclick="setReply('${m.id}')" title="Balas" style="margin-left:4px;opacity:0.5;">${ICONS.back}</button>` : ''}
       </div>`;
   }).join('') : `
     <div class="chat-empty">
@@ -1031,6 +1306,7 @@ function renderChat() {
   const c = state.activeChat;
   const isOnline = state.onlineUsers.has(c.id);
   const isBlocked = state.blockedByMe.has(c.id);
+  const isTyping = state.typingUsers.has(c.id);
   
   const wallpaperBg = state.chatWallpaper[c.id] || '';
   const wallpaperStyle = wallpaperBg ? `background-image: url('${escapeHtml(wallpaperBg)}'); background-size: cover; background-position: center;` : '';
@@ -1042,6 +1318,31 @@ function renderChat() {
     </div>
   ` : '';
 
+  let draftMediaHtml = '';
+  if (state.draftMediaUrl) {
+    let previewContent = '';
+    if (state.draftMediaFile && state.draftMediaFile.type.startsWith('audio/')) {
+       previewContent = `<audio src="${state.draftMediaUrl}" controls class="msg-audio"></audio>`;
+    } else {
+       previewContent = `<img src="${state.draftMediaUrl}" />`;
+    }
+    draftMediaHtml = `
+      <div class="draft-media-preview fade-in">
+        ${previewContent}
+        <button class="cancel-btn" onclick="cancelAttachment()">✕</button>
+      </div>`;
+  }
+  
+  let replyPreviewHtml = '';
+  if (state.replyingTo) {
+    replyPreviewHtml = `
+      <div class="draft-reply-preview fade-in">
+        <div class="reply-to-text">Membalas <b>${state.replyingTo.from === state.me.id ? 'Anda' : escapeHtml(c.name)}</b></div>
+        <div class="reply-text-preview">${escapeHtml(state.replyingTo.text || '📷 Media')}</div>
+        <button class="cancel-btn" onclick="cancelReply()">✕</button>
+      </div>`;
+  }
+
   return `
     <div class="chat-header fade-in" data-id="${c.id}" id="chat-header-area" style="cursor: pointer; z-index: 10;">
       <button class="icon-btn" id="back-home-btn" style="z-index: 2;">${ICONS.back}</button>
@@ -1050,7 +1351,7 @@ function renderChat() {
         <div class="chat-name">${escapeHtml(c.name)}</div>
         <div class="chat-status" style="color: ${isOnline ? '#22c55e' : 'var(--text-muted)'};">
           <span class="status-dot ${isOnline ? 'online' : ''}" style="margin-right:4px;"></span>
-          ${isOnline ? 'Online' : 'Offline'}
+          ${isTyping ? 'Sedang mengetik...' : (isOnline ? 'Online' : 'Offline')}
         </div>
       </div>
       <button class="icon-btn" id="chat-menu-btn" style="z-index: 2;">${ICONS.moreVert}</button>
@@ -1067,9 +1368,25 @@ function renderChat() {
         <button class="btn btn-ghost btn-sm" id="unblock-btn" style="margin-left: 12px;">Buka Blokir</button>
       </div>
     ` : `
-      <div class="composer fade-in">
-        <input class="field" id="composer-input" placeholder="Tulis pesan..." value="${escapeHtml(state.draftText)}" autocomplete="off">
-        <button class="send-btn" id="send-btn" ${!state.draftText.trim() ? 'disabled' : ''}>${ICONS.send}</button>
+      <div class="composer-container fade-in">
+        ${replyPreviewHtml}
+        ${draftMediaHtml}
+        <div class="composer">
+          ${state.isRecording ? `
+            <div class="recording-indicator">
+              <span class="dot recording-dot" style="margin:0;"></span>
+              <span id="recording-time">0:00</span>
+              <span style="font-size:13px; font-weight:normal; color:var(--text-muted);">Merekam suara...</span>
+            </div>
+            <button class="send-btn" style="background:var(--danger);" onclick="toggleRecording()">${ICONS.send}</button>
+          ` : `
+            <input type="file" id="chat-attachment-input" accept="image/*" style="display:none;" onchange="compressAndAttachImage(this.files[0])">
+            <button class="icon-btn" onclick="document.getElementById('chat-attachment-input').click()" title="Kirim Gambar">${ICONS.image}</button>
+            <button class="icon-btn" onclick="toggleRecording()" title="Kirim Pesan Suara">${ICONS.mic}</button>
+            <input class="field" id="composer-input" placeholder="Tulis pesan..." value="${escapeHtml(state.draftText)}" autocomplete="off" oninput="handleTyping(event)">
+            <button class="send-btn" id="send-btn" ${(!state.draftText.trim() && !state.draftMediaUrl) ? 'disabled' : ''}>${ICONS.send}</button>
+          `}
+        </div>
       </div>
     `}
   `;

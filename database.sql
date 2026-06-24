@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
     id text PRIMARY KEY,
     name text NOT NULL,
     avatar_url text,
-    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+    last_seen timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
 
 -- 2. Create follows table to track mutual connections
@@ -18,12 +19,16 @@ CREATE TABLE IF NOT EXISTS follows (
     PRIMARY KEY (follower_id, followed_id)
 );
 
--- 3. Create messages table (UPDATED WITH read_at)
+-- 3. Create messages table (UPDATED WITH ADVANCED FEATURES)
 CREATE TABLE IF NOT EXISTS messages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     sender_id text REFERENCES users(id) ON DELETE CASCADE,
     receiver_id text REFERENCES users(id) ON DELETE CASCADE,
-    text text NOT NULL,
+    text text,
+    media_url text,
+    media_type text,
+    reply_to uuid REFERENCES messages(id) ON DELETE SET NULL,
+    reactions jsonb DEFAULT '{}'::jsonb,
     created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     read_at timestamp with time zone
 );
@@ -33,6 +38,14 @@ CREATE TABLE IF NOT EXISTS messages (
 -- =======================================================
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at timestamp with time zone;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text;
+
+-- NEW MIGRATIONS FOR ADVANCED CHAT FEATURES
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen timestamp with time zone DEFAULT timezone('utc'::text, now());
+ALTER TABLE messages ALTER COLUMN text DROP NOT NULL;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_url text;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type text;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to uuid REFERENCES messages(id) ON DELETE SET NULL;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions jsonb DEFAULT '{}'::jsonb;
 
 -- 4. Set up Row Level Security (RLS) policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -69,7 +82,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE follows;
 ALTER PUBLICATION supabase_realtime ADD TABLE users;
 
 -- 6. Table for user blocks
-CREATE TABLE public.blocks (
+CREATE TABLE IF NOT EXISTS public.blocks (
   id uuid default gen_random_uuid() primary key,
   blocker_id text references public.users(id) on delete cascade,
   blocked_id text references public.users(id) on delete cascade,

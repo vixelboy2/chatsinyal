@@ -1113,3 +1113,235 @@ input.field::placeholder { color: var(--text-muted); }
   letter-spacing: 2px;
   margin-bottom: 24px;
 }
+
+/* ---------- Advanced Chat Features ---------- */
+.composer-container {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: var(--bg-composer);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.composer-container .composer {
+  border-top: none;
+  background: transparent;
+}
+
+.draft-media-preview {
+  padding: 12px 20px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.draft-media-preview img {
+  height: 60px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.draft-reply-preview {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  margin: 12px 20px 0;
+  border-radius: 4px 8px 8px 4px;
+}
+
+.draft-reply-preview > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.draft-reply-preview .reply-to-text {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.draft-reply-preview .reply-text-preview {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cancel-btn {
+  background: var(--surface-3);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 12px;
+}
+
+.cancel-btn:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.msg-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0px;
+}
+
+.msg-row-mine {
+  justify-content: flex-end;
+}
+
+.msg-row-theirs {
+  justify-content: flex-start;
+}
+
+.reply-btn {
+  opacity: 0;
+  transition: opacity 0.2s;
+  padding: 4px;
+}
+
+.msg-row:hover .reply-btn {
+  opacity: 0.5;
+}
+.msg-row .reply-btn:hover {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .reply-btn {
+    opacity: 0.3; /* Always partially visible on mobile */
+  }
+}
+
+.msg-reply {
+  background: rgba(0,0,0,0.15);
+  border-left: 3px solid rgba(255,255,255,0.3);
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.msg-mine .msg-reply {
+  background: rgba(0,0,0,0.1);
+  border-left-color: rgba(0,0,0,0.2);
+}
+
+.msg-reply-name {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  opacity: 0.8;
+}
+
+.msg-reply-text {
+  font-size: 12px;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.msg-image {
+  max-width: 100%;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.msg-audio {
+  width: 100%;
+  max-width: 250px;
+  height: 40px;
+  border-radius: 20px;
+  margin-bottom: 6px;
+}
+
+.recording-indicator {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--danger);
+  font-weight: 600;
+  padding-left: 12px;
+  animation: pulseBadge 2s infinite;
+}
+
+.msg-media-loading {
+  padding: 12px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.msg-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.reaction-badge {
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  user-select: none;
+}
+
+.reaction-badge small {
+  opacity: 0.6;
+}
+
+.msg-mine .reaction-badge {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.2);
+}
+
+.reaction-menu {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 8px;
+  border-radius: 20px;
+  display: flex;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  margin: auto;
+}
+
+.reaction-menu button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.reaction-menu button:hover {
+  transform: scale(1.2);
+  background: var(--surface-2);
+}
