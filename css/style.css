@@ -440,6 +440,7 @@ input.field::placeholder { color: var(--text-muted); }
   font-weight: 800;
   background: linear-gradient(to right, #fff, #ffae66);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
