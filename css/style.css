@@ -588,21 +588,22 @@ input.field::placeholder { color: var(--text-muted); }
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ff9500, #ff5e00);
-  color: #110d0a;
+  background: var(--msg-mine-bg);
+  color: var(--msg-mine-color);
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px rgba(255, 123, 0, 0.4);
+  box-shadow: 0 4px 20px var(--accent-soft);
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
   z-index: 10;
 }
 
 .fab-btn:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(255, 123, 0, 0.55);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 24px var(--accent-soft);
 }
 
 .fab-btn:active {

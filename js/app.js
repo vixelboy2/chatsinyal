@@ -877,6 +877,7 @@ async function sendMessage() {
     ts: new Date().toISOString(), 
     read_at: null,
     media_url: mediaFile ? 'uploading' : null,
+    media_type: mediaFile ? mediaFile.type : null,
     reply_to: replyToId,
     reactions: {}
   };
@@ -915,21 +916,46 @@ async function sendMessage() {
     // Remove temp message on failure
     state.messages = state.messages.filter(m => m.id !== tempId);
     if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
-    alert("Gagal mengirim pesan.");
+    // Show specific error
+    const errMsg = e?.message || 'Unknown error';
+    if (errMsg.toLowerCase().includes('bucket') || errMsg.toLowerCase().includes('storage') || errMsg.toLowerCase().includes('not found')) {
+      alert("Gagal upload: Pastikan bucket 'chat-media' sudah dibuat di Supabase Storage dan diset sebagai Public.");
+    } else {
+      alert("Gagal mengirim pesan: " + errMsg);
+    }
   }
   
   state.busy = false;
   if (input) input.focus();
 }
 
-async function sendReaction(msgId, emoji) {
+window.sendReaction = async function(msgId, emoji) {
   try {
+    // Optimistic UI Update
+    const msg = state.messages.find(m => m.id === msgId);
+    if (msg) {
+      if (!msg.reactions) msg.reactions = {};
+      if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+      
+      // Toggle reaction locally
+      if (msg.reactions[emoji].includes(state.me.id)) {
+        msg.reactions[emoji] = msg.reactions[emoji].filter(id => id !== state.me.id);
+        if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+      } else {
+        msg.reactions[emoji].push(state.me.id);
+      }
+      
+      const msgContainer = document.getElementById('messages-container');
+      if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
+    }
+    
     await db.reactToMessage(msgId, emoji, state.me.id);
-    // The realtime subscription will update the UI
   } catch (err) {
     console.error("Gagal mengirim reaksi", err);
+    alert("Gagal mengirim reaksi: " + (err.message || 'Error'));
+    // Ideally we would revert the optimistic update here on failure
   }
-}
+};
 
 function setReply(msgId) {
   const msg = state.messages.find(m => m.id === msgId);
@@ -1347,7 +1373,8 @@ function getChatMessagesHtml() {
     let mediaHtml = '';
     if (m.media_url) {
       if (m.media_url === 'uploading') {
-         mediaHtml = `<div class="msg-media-loading"><div style="opacity:0.6;font-size:12px;">Mengunggah media...</div></div>`;
+         const isAudio = m.media_type && m.media_type.startsWith('audio/');
+         mediaHtml = `<div class="msg-media-loading"><div style="opacity:0.6;font-size:12px;">${isAudio ? 'Mengirim VN...' : 'Mengirim media...'}</div></div>`;
       } else if (m.media_type && m.media_type.startsWith('image/')) {
          mediaHtml = `<img src="${escapeHtml(m.media_url)}" class="msg-image" alt="Image" onclick="window.open(this.src)" />`;
       } else if (m.media_type && m.media_type.startsWith('audio/')) {
