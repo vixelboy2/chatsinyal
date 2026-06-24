@@ -131,20 +131,35 @@ function setupPresence() {
 }
 
 function setupHomeSubscription() {
-  clearSubscriptions();
+  // On desktop, we share the subscription with the chat, don't clear it
+  if (!isDesktop()) clearSubscriptions();
+  else {
+    // But we still need home-level updates
+    state.subscriptions.forEach(sub => supabase.removeChannel(sub));
+    state.subscriptions = [];
+  }
   setupPresence();
   
   if (!state.me) return;
 
   const channel = supabase.channel('home_updates')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, payload => {
-      loadHomeData().then(render);
+      loadHomeData().then(() => {
+        if (isDesktop()) renderDesktop();
+        else render();
+      });
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
-      loadHomeData().then(render);
+      loadHomeData().then(() => {
+        if (isDesktop()) renderDesktop();
+        else render();
+      });
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${state.me.id}` }, payload => {
-      loadHomeData().then(render);
+      loadHomeData().then(() => {
+        if (isDesktop()) renderDesktop();
+        else render();
+      });
     })
     .subscribe();
   
@@ -157,16 +172,34 @@ function setupChatSubscription(chatPartnerId) {
   
   if (!state.me) return;
 
+  // Efficient partial update: only refresh messages container without full re-render
+  function refreshChatUI() {
+    const msgContainer = document.getElementById('messages-container');
+    if (msgContainer) {
+      msgContainer.innerHTML = getChatMessagesHtml();
+      scrollMessagesToBottom();
+    }
+  }
+
   const channelId = `chat_${Math.min(state.me.id, chatPartnerId)}_${Math.max(state.me.id, chatPartnerId)}`;
   const channel = supabase.channel(channelId)
     .on('broadcast', { event: 'typing' }, payload => {
       if (payload.payload.user_id === chatPartnerId) {
         state.typingUsers.add(chatPartnerId);
-        render();
+        const statusEl = document.querySelector('.chat-status');
+        if (statusEl) {
+          statusEl.style.color = '#22c55e';
+          statusEl.innerHTML = `<span class="status-dot online" style="margin-right:4px;"></span><span class="typing-dots">Sedang mengetik</span>`;
+        }
         clearTimeout(window.typingTimeout);
         window.typingTimeout = setTimeout(() => {
           state.typingUsers.delete(chatPartnerId);
-          render();
+          const isOnline = state.onlineUsers.has(chatPartnerId);
+          const statusEl2 = document.querySelector('.chat-status');
+          if (statusEl2) {
+            statusEl2.style.color = isOnline ? '#22c55e' : 'var(--text-muted)';
+            statusEl2.innerHTML = `<span class="status-dot ${isOnline ? 'online' : ''}" style="margin-right:4px;"></span>${isOnline ? 'Online' : 'Offline'}`;
+          }
         }, 3000);
       }
     })
@@ -184,8 +217,7 @@ function setupChatSubscription(chatPartnerId) {
           reply_to: payload.new.reply_to,
           reactions: payload.new.reactions || {}
         });
-        render();
-        scrollMessagesToBottom();
+        refreshChatUI();
       }
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${state.me.id}` }, payload => {
@@ -194,22 +226,18 @@ function setupChatSubscription(chatPartnerId) {
         if (msg) {
           msg.read_at = payload.new.read_at;
           msg.reactions = payload.new.reactions || {};
-          render();
+          refreshChatUI();
         } else {
-          refreshMessages().then(() => {
-            render();
-            scrollMessagesToBottom();
-          });
+          refreshMessages().then(() => refreshChatUI());
         }
       }
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${state.me.id}` }, payload => {
-      // Handle reactions from the other person on their own messages
       if (payload.new.sender_id === chatPartnerId) {
         const msg = state.messages.find(m => m.id === payload.new.id);
         if (msg) {
           msg.reactions = payload.new.reactions || {};
-          render();
+          refreshChatUI();
         }
       }
     })
@@ -315,6 +343,7 @@ async function logout() {
 
 // ============ Home ============
 async function goHome() {
+  state.activeChat = null; // on mobile, going home clears chat
   state.view = 'home';
   state.showAddPanel = false;
   state.error = '';
@@ -771,19 +800,32 @@ function toggleProfileModal() {
 }
 
 // ============ Chat ============
+function isDesktop() {
+  return window.innerWidth >= 768;
+}
+
 async function openChat(id, name, avatar_url) {
-  state.view = 'chat';
   state.activeChat = { id, name, avatar_url };
   state.draftText = '';
+  state.draftMediaUrl = null;
+  state.draftMediaFile = null;
+  state.replyingTo = null;
+  state.searchQuery = '';
+  state.showChatSearch = false;
   
   setupChatSubscription(id);
-  
-  // Mark messages as read immediately
   await db.markMessagesAsRead(id, state.me.id);
   state.unreadCounts[id] = 0;
-  
   await refreshMessages();
-  render();
+  
+  if (isDesktop()) {
+    // On desktop: refresh sidebar contact list and render chat panel
+    state.view = 'home'; // keep home state so sidebar stays
+    renderDesktop();
+  } else {
+    state.view = 'chat';
+    render();
+  }
 }
 
 async function refreshMessages() {
@@ -904,7 +946,10 @@ function cancelReply() {
   render();
 }
 
-function compressAndAttachImage(file) {
+// IMPORTANT: These functions must be on window because they are called
+// from inline HTML onclick handlers inside an ES module scope.
+window.compressAndAttachImage = function(file) {
+  if (!file) return;
   const reader = new FileReader();
   reader.onload = (event) => {
     const img = new Image();
@@ -916,40 +961,95 @@ function compressAndAttachImage(file) {
       let height = img.height;
 
       if (width > height) {
-        if (width > MAX_WIDTH) {
-          height *= MAX_WIDTH / width;
-          width = MAX_WIDTH;
-        }
+        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
       } else {
-        if (height > MAX_HEIGHT) {
-          width *= MAX_HEIGHT / height;
-          height = MAX_HEIGHT;
-        }
+        if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
       }
 
       canvas.width = width;
       canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
 
-      // Compress to JPEG with 0.7 quality
       canvas.toBlob((blob) => {
         if (!blob) return;
         blob.name = file.name || 'image.jpg';
         state.draftMediaFile = blob;
         state.draftMediaUrl = canvas.toDataURL('image/jpeg', 0.7);
-        render();
+        renderComposerPreviews();
+        const btn = document.getElementById('send-btn');
+        if (btn) btn.disabled = false;
       }, 'image/jpeg', 0.7);
     };
     img.src = event.target.result;
   };
   reader.readAsDataURL(file);
-}
+};
 
-function cancelAttachment() {
+window.cancelAttachment = function() {
   state.draftMediaFile = null;
   state.draftMediaUrl = null;
-  render();
+  renderComposerPreviews();
+  const btn = document.getElementById('send-btn');
+  if (btn) btn.disabled = (!state.draftText.trim());
+};
+
+window.setReply = function(msgId) {
+  const msg = state.messages.find(m => m.id === msgId);
+  if (msg) {
+    state.replyingTo = msg;
+    renderComposerPreviews();
+    const input = document.getElementById('composer-input');
+    if (input) input.focus();
+  }
+};
+
+window.cancelReply = function() {
+  state.replyingTo = null;
+  renderComposerPreviews();
+};
+
+window.sendReaction = async function(msgId, emoji) {
+  try {
+    await db.reactToMessage(msgId, emoji, state.me.id);
+  } catch (err) {
+    console.error("Gagal mengirim reaksi", err);
+  }
+};
+
+// Helper to only update the preview area without full re-render
+function renderComposerPreviews() {
+  const previewsContainer = document.getElementById('composer-previews');
+  if (!previewsContainer || !state.activeChat) return;
+
+  const c = state.activeChat;
+  let html = '';
+
+  if (state.replyingTo) {
+    html += `
+      <div class="draft-reply-preview">
+        <div>
+          <div class="reply-to-text">Membalas <b>${state.replyingTo.from === state.me.id ? 'Anda' : escapeHtml(c.name)}</b></div>
+          <div class="reply-text-preview">${escapeHtml(state.replyingTo.text || '📷 Media')}</div>
+        </div>
+        <button class="cancel-btn" onclick="cancelReply()">✕</button>
+      </div>`;
+  }
+
+  if (state.draftMediaUrl) {
+    let previewContent = '';
+    if (state.draftMediaFile && state.draftMediaFile.type.startsWith('audio/')) {
+      previewContent = `<audio src="${state.draftMediaUrl}" controls class="msg-audio"></audio>`;
+    } else {
+      previewContent = `<img src="${state.draftMediaUrl}" style="height:60px;border-radius:8px;border:1px solid var(--line);" />`;
+    }
+    html += `
+      <div class="draft-media-preview">
+        ${previewContent}
+        <button class="cancel-btn" onclick="cancelAttachment()">✕</button>
+      </div>`;
+  }
+
+  previewsContainer.innerHTML = html;
 }
 
 window.toggleRecording = async function() {
@@ -1143,7 +1243,7 @@ function renderHome() {
       }
 
       return `
-      <div class="person-row open-chat" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-avatar="${escapeHtml(p.avatar_url || '')}">
+      <div class="person-row open-chat ${state.activeChat && state.activeChat.id === p.id ? 'active' : ''}" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-avatar="${escapeHtml(p.avatar_url || '')}">
         ${renderAvatarHtml(p.name, p.avatar_url)}
         <div class="person-info">
           <div class="person-name">
@@ -1214,7 +1314,8 @@ window.toggleReactionMenu = function(msgId, event) {
       </div>
     </div>
   `;
-  document.getElementById('app').insertAdjacentHTML('beforeend', html);
+  const container = document.getElementById('app-chat-panel') || document.getElementById('app');
+  container.insertAdjacentHTML('beforeend', html);
 };
 
 window.handleTyping = function(event) {
@@ -1369,9 +1470,11 @@ function renderChat() {
       </div>
     ` : `
       <div class="composer-container fade-in">
-        ${replyPreviewHtml}
-        ${draftMediaHtml}
-        <div class="composer">
+        <div id="composer-previews">
+          ${replyPreviewHtml}
+          ${draftMediaHtml}
+        </div>
+        <div class="composer" id="composer-controls">
           ${state.isRecording ? `
             <div class="recording-indicator">
               <span class="dot recording-dot" style="margin:0;"></span>
@@ -1470,8 +1573,49 @@ function renderSettings() {
     </div>`;
 }
 
+// ============ Desktop Two-Column Render ============
+function renderDesktop() {
+  const app = document.getElementById('app');
+  app.classList.add('app-desktop');
+  
+  let sidebarHtml = renderHome();
+  let chatPanelHtml = '';
+
+  if (state.activeChat) {
+    chatPanelHtml = renderChat();
+  } else {
+    // Show empty state in chat panel
+    chatPanelHtml = `
+      <div class="chat-empty-panel fade-in">
+        <div class="empty-icon" style="width:80px;height:80px;margin-bottom:20px;">${ICONS.empty}</div>
+        <div style="font-size:18px; font-weight:700; margin-bottom:8px;">Pilih Obrolan</div>
+        <div style="color:var(--text-muted); font-size:14px;">Klik salah satu kontak di sebelah kiri untuk mulai mengobrol.</div>
+      </div>`;
+  }
+
+  app.innerHTML = `
+    <div class="app-sidebar" id="app-sidebar">${sidebarHtml}</div>
+    <div class="app-chat-panel" id="app-chat-panel">${chatPanelHtml}</div>
+  `;
+  
+  attachHomeHandlers();
+  if (state.activeChat) {
+    attachChatHandlers();
+    scrollMessagesToBottom();
+  }
+}
+
 function render() {
   const app = document.getElementById('app');
+  
+  // If desktop and we're in home/chat state, use the two-column layout
+  if (isDesktop() && (state.view === 'home' || state.view === 'chat')) {
+    renderDesktop();
+    return;
+  }
+  
+  app.classList.remove('app-desktop');
+
   if (state.view === 'loading') {
     app.innerHTML = `<div class="onboard fade-in"><div class="onboard-wave">${waveHtml()}</div></div>`;
   } else if (state.view === 'onboarding') {
@@ -1484,21 +1628,26 @@ function render() {
     app.innerHTML = renderSettings();
     attachSettingsHandlers();
   } else if (state.view === 'chat') {
-    if (app.querySelector(`.chat-header[data-id="${state.activeChat.id}"]`)) {
-      // Partial update to avoid flickering and losing input focus
+    // If transitioning to/from recording, force full re-render
+    const isCurrentlyRecordingUI = app.querySelector('.recording-indicator') !== null;
+    const needsFullRender = (state.isRecording !== isCurrentlyRecordingUI);
+
+    if (!needsFullRender && app.querySelector(`.chat-header[data-id="${state.activeChat.id}"]`)) {
       const isOnline = state.onlineUsers.has(state.activeChat.id);
+      const isTyping = state.typingUsers.has(state.activeChat.id);
       
       const msgContainer = document.getElementById('messages-container');
       if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
       
       const statusEl = document.querySelector('.chat-status');
       if (statusEl) {
-        statusEl.style.color = isOnline ? '#22c55e' : 'var(--text-muted)';
-        statusEl.innerHTML = `<span class="status-dot ${isOnline ? 'online' : ''}" style="margin-right:4px;"></span>${isOnline ? 'Online' : 'Offline'}`;
+        statusEl.style.color = (isOnline || isTyping) ? '#22c55e' : 'var(--text-muted)';
+        statusEl.innerHTML = `<span class="status-dot ${isOnline ? 'online' : ''}" style="margin-right:4px;"></span>${isTyping ? '<span class="typing-dots">Sedang mengetik</span>' : (isOnline ? 'Online' : 'Offline')}`;
       }
       
+      renderComposerPreviews();
       const btn = document.getElementById('send-btn');
-      if (btn) btn.disabled = !state.draftText.trim();
+      if (btn) btn.disabled = (!state.draftText.trim() && !state.draftMediaUrl);
       
       scrollMessagesToBottom();
     } else {
@@ -1508,6 +1657,15 @@ function render() {
     }
   }
 }
+
+// Handle resize between mobile/desktop
+window.addEventListener('resize', () => {
+  if (state.view === 'home' || state.view === 'chat') {
+    if (isDesktop()) renderDesktop();
+    else render();
+  }
+});
+
 
 // ============ Event Handlers ============
 function attachOnboardingHandlers() {
@@ -1604,9 +1762,9 @@ function attachChatHandlers() {
     }
     input.oninput = e => { 
       state.draftText = e.target.value; 
-      if (btn) btn.disabled = !state.draftText.trim();
+      if (btn) btn.disabled = (!state.draftText.trim() && !state.draftMediaUrl);
     };
-    input.onkeydown = e => { if (e.key === 'Enter') sendMessage(); };
+    input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(); };
   }
   
   if (byId('chat-menu-btn')) {

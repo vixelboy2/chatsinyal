@@ -153,6 +153,88 @@ body {
   overflow: hidden;
 }
 
+/* Desktop: two-column WhatsApp Web layout */
+@media (min-width: 768px) {
+  body {
+    padding: 0;
+    justify-content: center;
+  }
+
+  #app {
+    max-width: 100%;
+    width: 100%;
+    border: none;
+    box-shadow: none;
+  }
+
+  #app.app-desktop {
+    flex-direction: row;
+  }
+
+  .app-sidebar {
+    width: 360px;
+    min-width: 300px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    border-right: 1px solid var(--line);
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .app-sidebar .header {
+    position: relative; /* don't be sticky inside sidebar, it's already contained */
+  }
+
+  .app-sidebar .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 16px;
+  }
+
+  .app-sidebar .home-id-bar {
+    flex-shrink: 0;
+  }
+
+  .app-chat-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg);
+    background-image: var(--bg-grad);
+    position: relative;
+  }
+
+  .app-chat-panel .chat-header {
+    position: relative; /* not sticky inside panel */
+  }
+
+  .app-chat-panel .messages {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  /* On desktop, hide the back button in chat header */
+  .app-chat-panel #back-home-btn {
+    display: none !important;
+  }
+
+  /* Show back button on mobile */
+  #back-home-btn {
+    display: flex;
+  }
+
+  /* Highlight active chat contact in sidebar */
+  .person-row.open-chat.active {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding-left: 21px; /* 24 - 3 border */
+  }
+}
+
 /* ---------- Shared Bits ---------- */
 .header {
   padding: 20px 24px;
@@ -644,9 +726,36 @@ input.field::placeholder { color: var(--text-muted); }
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  /* Ensures this scrolls on its own, not the whole page */
+  gap: 8px;
   min-height: 0;
+}
+
+/* Desktop chat empty panel */
+.chat-empty-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 40px;
+  background: var(--bg);
+  background-image: var(--bg-grad);
+}
+
+/* Typing indicator animation */
+.typing-dots::after {
+  content: '';
+  animation: typing-ellipsis 1.4s infinite;
+}
+
+@keyframes typing-ellipsis {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+  100% { content: ''; }
 }
 
 .msg {
