@@ -45,8 +45,19 @@ const ICONS = {
   shield: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
   image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
   user: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
-  mic: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>`
+  mic: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>`,
+  download: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
 };
+
+window.deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.deferredPrompt = e;
+  const headerBtn = document.getElementById('install-pwa-header-btn');
+  if (headerBtn) headerBtn.style.display = 'inline-flex';
+  const installContainer = document.getElementById('install-pwa-container');
+  if (installContainer) installContainer.style.display = 'block';
+});
 
 // ============ State ============
 let state = {
@@ -1517,7 +1528,8 @@ function renderHome() {
   return `
     <div class="header fade-in">
       <div class="brand"><span class="dot"></span>SINYAL</div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="icon-btn" id="install-pwa-header-btn" title="Install Aplikasi" style="${window.deferredPrompt ? 'display:inline-flex;' : 'display:none;'} color:var(--accent);">${ICONS.download}</button>
         <button class="icon-btn" id="settings-btn" title="Pengaturan">${ICONS.settings}</button>
         <button class="icon-btn" id="logout-btn" title="Keluar">${ICONS.logout}</button>
       </div>
@@ -1938,6 +1950,19 @@ function attachHomeHandlers() {
   if (byId('submit-add-friend')) byId('submit-add-friend').onclick = addFriendAction;
   if (byId('cancel-add-friend')) byId('cancel-add-friend').onclick = toggleAddPanel;
   
+  if (byId('install-pwa-header-btn')) {
+    byId('install-pwa-header-btn').onclick = async () => {
+      if (window.deferredPrompt) {
+        window.deferredPrompt.prompt();
+        const { outcome } = await window.deferredPrompt.userChoice;
+        if (outcome === 'accepted') window.deferredPrompt = null;
+        render();
+      } else {
+        alert("Untuk menginstall Sinyal Chat:\n\n1. Di Chrome: Tekan titik 3 (⋮) -> 'Tambahkan ke Layar Utama' / 'Install App'\n2. Di Safari iOS: Tekan tombol Bagikan (Share) -> 'Tambahkan ke Layar Utama'");
+      }
+    };
+  }
+  
   const addInput = byId('add-friend-input');
   if (addInput) {
     addInput.oninput = e => { state.addFriendInput = e.target.value; };
@@ -1979,15 +2004,21 @@ function attachSettingsHandlers() {
 
   const installBtn = byId('install-pwa-btn');
   const installContainer = byId('install-pwa-container');
-  if (window.deferredPrompt && installContainer && installBtn) {
-    installContainer.style.display = 'block';
+  if (installContainer) {
+    installContainer.style.display = window.deferredPrompt ? 'block' : 'none';
+  }
+  if (installBtn) {
     installBtn.onclick = async () => {
-      window.deferredPrompt.prompt();
-      const { outcome } = await window.deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        installContainer.style.display = 'none';
+      if (window.deferredPrompt) {
+        window.deferredPrompt.prompt();
+        const { outcome } = await window.deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          window.deferredPrompt = null;
+        }
+        render();
+      } else {
+        alert("Untuk menginstall Sinyal Chat:\n\n1. Di Chrome: Tekan titik 3 (⋮) -> 'Tambahkan ke Layar Utama' / 'Install App'\n2. Di Safari iOS: Tekan tombol Bagikan (Share) -> 'Tambahkan ke Layar Utama'");
       }
-      window.deferredPrompt = null;
     };
   }
 }

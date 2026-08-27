@@ -45,6 +45,12 @@ try {
   if (fs.existsSync(path.join(__dirname, 'manifest.json'))) {
     fs.cpSync(path.join(__dirname, 'manifest.json'), path.join(publicDir, 'manifest.json'));
   }
+  if (fs.existsSync(path.join(__dirname, 'icon-192.png'))) {
+    fs.cpSync(path.join(__dirname, 'icon-192.png'), path.join(publicDir, 'icon-192.png'));
+  }
+  if (fs.existsSync(path.join(__dirname, 'icon-512.png'))) {
+    fs.cpSync(path.join(__dirname, 'icon-512.png'), path.join(publicDir, 'icon-512.png'));
+  }
   fs.cpSync(path.join(__dirname, 'css'), path.join(publicDir, 'css'), { recursive: true });
   fs.cpSync(path.join(__dirname, 'js'), path.join(publicDir, 'js'), { recursive: true });
   
