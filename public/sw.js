@@ -1,14 +1,13 @@
-const CACHE_NAME = 'sinyal-chat-v3';
+const CACHE_NAME = 'sinyal-chat-v4';
 const ASSETS = [
-  './',
-  './index.html',
-  './css/style.css',
-  './js/app.js',
-  './js/supabase.js',
-  './js/supabase.template.js',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  '/',
+  '/index.html',
+  '/css/style.css',
+  '/js/app.js',
+  '/js/supabase.js',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 self.addEventListener('install', event => {
