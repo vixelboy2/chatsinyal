@@ -115,13 +115,17 @@ export const db = {
     return data;
   },
 
-  async sendMessage(senderId, receiverId, text) {
-    const { error } = await supabase.from('messages').insert([{
+  async sendMessage(senderId, receiverId, text, mediaUrl = null, mediaType = null, replyTo = null) {
+    const { data, error } = await supabase.from('messages').insert([{
       sender_id: senderId,
       receiver_id: receiverId,
-      text: text
-    }]);
+      text: text,
+      media_url: mediaUrl,
+      media_type: mediaType,
+      reply_to: replyTo
+    }]).select().single();
     if (error) throw error;
+    return data;
   },
 
   async markMessagesAsRead(senderId, receiverId) {
