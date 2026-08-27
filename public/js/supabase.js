@@ -25,6 +25,39 @@ export const db = {
     return data;
   },
 
+  async updateUserName(id, newName) {
+    const { error } = await supabase.from('users').update({ name: newName }).eq('id', id);
+    if (error) throw error;
+  },
+
+  async uploadAvatar(id, file) {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${id}_${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+    if (!data || !data.publicUrl) throw new Error("Gagal mendapatkan URL gambar");
+
+    const { error: updateError } = await supabase.from('users')
+      .update({ avatar_url: data.publicUrl })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+    return data.publicUrl;
+  },
+
+  async removeAvatar(id) {
+    const { error } = await supabase.from('users')
+      .update({ avatar_url: null })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
   async addFollow(followerId, followedId) {
     const { error } = await supabase.from('follows').insert([{ follower_id: followerId, followed_id: followedId }]);
     // Ignore duplicate errors if they already follow each other
@@ -102,5 +135,28 @@ export const db = {
       .is('read_at', null);
     
     if (error) console.error("Error marking read", error);
+  },
+
+  async clearChat(user1, user2) {
+    const { error } = await supabase.from('messages')
+      .delete()
+      .or(`and(sender_id.eq.${user1},receiver_id.eq.${user2}),and(sender_id.eq.${user2},receiver_id.eq.${user1})`);
+    if (error) throw error;
+  },
+
+  async blockUser(blockerId, blockedId) {
+    const { error } = await supabase.from('blocks').insert([{ blocker_id: blockerId, blocked_id: blockedId }]);
+    if (error && error.code !== '23505') throw error;
+  },
+
+  async unblockUser(blockerId, blockedId) {
+    const { error } = await supabase.from('blocks').delete().match({ blocker_id: blockerId, blocked_id: blockedId });
+    if (error) throw error;
+  },
+
+  async getBlocks(userId) {
+    const { data, error } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', userId);
+    if (error) throw error;
+    return data.map(b => b.blocked_id);
   }
 };

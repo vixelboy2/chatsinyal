@@ -130,6 +130,42 @@ function setupPresence() {
     });
 }
 
+// Lightweight sidebar refresh: only updates the scroll-area/contacts list without
+// flushing the entire DOM. This prevents the visual glitch/flash when a new message arrives.
+async function refreshSidebar() {
+  await loadHomeData();
+  if (isDesktop()) {
+    // On desktop, only update the sidebar panel, not the whole app
+    const sidebar = document.getElementById('app-sidebar');
+    if (sidebar) {
+      // Re-render just the sidebar content
+      sidebar.innerHTML = renderHome();
+      attachHomeHandlers();
+      return;
+    }
+    // fallback
+    renderDesktop();
+  } else {
+    // On mobile: only update the contact list area if we're on the home view
+    if (state.view === 'home') {
+      const scrollArea = document.querySelector('#app .scroll-area');
+      if (scrollArea) {
+        // Surgically update the scroll area HTML and re-attach handlers
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = renderHome();
+        const newScrollArea = tempDiv.querySelector('.scroll-area');
+        if (newScrollArea) {
+          scrollArea.innerHTML = newScrollArea.innerHTML;
+          attachHomeHandlers();
+          return;
+        }
+      }
+      render(); // fallback full render
+    }
+    // If we're in chat view on mobile, no sidebar to update
+  }
+}
+
 function setupHomeSubscription() {
   // On desktop, we share the subscription with the chat, don't clear it
   if (!isDesktop()) clearSubscriptions();
@@ -144,18 +180,20 @@ function setupHomeSubscription() {
 
   const channel = supabase.channel('home_updates')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, payload => {
-      loadHomeData().then(() => {
-        if (isDesktop()) renderDesktop();
-        else render();
-      });
+      // Follows change: need full sidebar refresh (rarely happens)
+      refreshSidebar();
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, payload => {
-      // Local filter
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+      // Only refresh sidebar when we are involved in the message
       if (payload.new && (payload.new.receiver_id === state.me.id || payload.new.sender_id === state.me.id)) {
-        loadHomeData().then(() => {
-          if (isDesktop()) renderDesktop();
-          else render();
-        });
+        // Use lightweight refresh — no full DOM flash
+        refreshSidebar();
+      }
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
+      // Read-receipts and reactions: only refresh sidebar for unread badge updates
+      if (payload.new && (payload.new.receiver_id === state.me.id || payload.new.sender_id === state.me.id)) {
+        refreshSidebar();
       }
     })
     .subscribe();
@@ -201,26 +239,51 @@ function setupChatSubscription(chatPartnerId) {
       }
     })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-      if (payload.new && payload.new.receiver_id === state.me.id && payload.new.sender_id === chatPartnerId) {
+      if (!payload.new) return;
+      const { sender_id, receiver_id } = payload.new;
+      
+      // Case 1: We RECEIVED a new message from chat partner
+      if (receiver_id === state.me.id && sender_id === chatPartnerId) {
         db.markMessagesAsRead(chatPartnerId, state.me.id);
-        state.messages.push({
-          id: payload.new.id,
-          from: payload.new.sender_id,
-          text: payload.new.text,
-          ts: payload.new.created_at,
-          read_at: new Date().toISOString(),
-          media_url: payload.new.media_url,
-          media_type: payload.new.media_type,
-          reply_to: payload.new.reply_to,
-          reactions: payload.new.reactions || {}
-        });
-        refreshChatUI();
+        // Only add if not already in list (avoid duplicates from optimistic UI)
+        if (!state.messages.find(m => m.id === payload.new.id)) {
+          state.messages.push({
+            id: payload.new.id,
+            from: payload.new.sender_id,
+            text: payload.new.text,
+            ts: payload.new.created_at,
+            read_at: new Date().toISOString(),
+            media_url: payload.new.media_url,
+            media_type: payload.new.media_type,
+            reply_to: payload.new.reply_to,
+            reactions: payload.new.reactions || {}
+          });
+          refreshChatUI();
+        }
+      }
+      
+      // Case 2: We SENT a message and Supabase confirms it (replace temp message)
+      // This handles the case where the optimistic temp message needs to be confirmed
+      if (sender_id === state.me.id && receiver_id === chatPartnerId) {
+        const tempMsg = state.messages.find(m => 
+          m.id && m.id.startsWith('temp-') && m.text === payload.new.text && m.from === state.me.id
+        );
+        if (tempMsg) {
+          // Replace temp message with real DB message
+          tempMsg.id = payload.new.id;
+          tempMsg.ts = payload.new.created_at;
+          tempMsg.media_url = payload.new.media_url;
+          tempMsg.media_type = payload.new.media_type;
+          refreshChatUI();
+        }
+        // Also update sidebar to show latest message
+        refreshSidebar();
       }
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
       if (!payload.new) return;
       
-      // If I sent it, and receiver is partner
+      // If I sent it, and receiver is partner — update read receipt & reactions
       if (payload.new.sender_id === state.me.id && payload.new.receiver_id === chatPartnerId) {
         const msg = state.messages.find(m => m.id === payload.new.id);
         if (msg) {
@@ -232,11 +295,12 @@ function setupChatSubscription(chatPartnerId) {
         }
       }
       
-      // If I received it, from partner
+      // If I received it, from partner — update reactions
       if (payload.new.receiver_id === state.me.id && payload.new.sender_id === chatPartnerId) {
         const msg = state.messages.find(m => m.id === payload.new.id);
         if (msg) {
           msg.reactions = payload.new.reactions || {};
+          if (payload.new.read_at && !msg.read_at) msg.read_at = payload.new.read_at;
           refreshChatUI();
         }
       }
