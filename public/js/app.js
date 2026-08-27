@@ -217,7 +217,18 @@ function setupChatSubscription(chatPartnerId) {
   }
 
   const channelId = `chat_${Math.min(state.me.id, chatPartnerId)}_${Math.max(state.me.id, chatPartnerId)}`;
-  const channel = supabase.channel(channelId)
+  const channel = supabase.channel(channelId, { config: { broadcast: { self: false } } })
+    // ====== PRIMARY: instant delivery via broadcast (like WhatsApp push) ======
+    .on('broadcast', { event: 'new_message' }, payload => {
+      const msg = payload.payload;
+      if (!msg || msg.from !== chatPartnerId) return;
+      // Avoid duplicates (postgres_changes might also arrive later)
+      if (state.messages.find(m => m.id === msg.id)) return;
+      state.messages.push(msg);
+      db.markMessagesAsRead(chatPartnerId, state.me.id);
+      refreshChatUI();
+      refreshSidebar();
+    })
     .on('broadcast', { event: 'typing' }, payload => {
       if (payload.payload.user_id === chatPartnerId) {
         state.typingUsers.add(chatPartnerId);
@@ -238,15 +249,15 @@ function setupChatSubscription(chatPartnerId) {
         }, 3000);
       }
     })
+    // ====== FALLBACK: postgres_changes (catches missed broadcasts) ======
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
       if (!payload.new) return;
       const { sender_id, receiver_id } = payload.new;
       
-      // Case 1: We RECEIVED a new message from chat partner
+      // Incoming message from partner — only add if broadcast didn't already deliver it
       if (receiver_id === state.me.id && sender_id === chatPartnerId) {
-        db.markMessagesAsRead(chatPartnerId, state.me.id);
-        // Only add if not already in list (avoid duplicates from optimistic UI)
         if (!state.messages.find(m => m.id === payload.new.id)) {
+          db.markMessagesAsRead(chatPartnerId, state.me.id);
           state.messages.push({
             id: payload.new.id,
             from: payload.new.sender_id,
@@ -259,24 +270,22 @@ function setupChatSubscription(chatPartnerId) {
             reactions: payload.new.reactions || {}
           });
           refreshChatUI();
+          refreshSidebar();
         }
       }
       
-      // Case 2: We SENT a message and Supabase confirms it (replace temp message)
-      // This handles the case where the optimistic temp message needs to be confirmed
+      // Our sent message confirmed by DB — replace temp placeholder
       if (sender_id === state.me.id && receiver_id === chatPartnerId) {
         const tempMsg = state.messages.find(m => 
           m.id && m.id.startsWith('temp-') && m.text === payload.new.text && m.from === state.me.id
         );
         if (tempMsg) {
-          // Replace temp message with real DB message
           tempMsg.id = payload.new.id;
           tempMsg.ts = payload.new.created_at;
           tempMsg.media_url = payload.new.media_url;
           tempMsg.media_type = payload.new.media_type;
           refreshChatUI();
         }
-        // Also update sidebar to show latest message
         refreshSidebar();
       }
     })
@@ -972,8 +981,30 @@ async function sendMessage() {
         state.messages[msgIndex].id = data.id;
         state.messages[msgIndex].media_url = finalMediaUrl;
         state.messages[msgIndex].media_type = finalMediaType;
+        state.messages[msgIndex].ts = data.created_at || state.messages[msgIndex].ts;
       }
       if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
+      
+      // ====== BROADCAST: push message to partner instantly via WebSocket ======
+      // This is the primary delivery mechanism (like WhatsApp push).
+      // Partner receives it via the 'new_message' broadcast listener in setupChatSubscription.
+      if (state.activeChatChannel) {
+        state.activeChatChannel.send({
+          type: 'broadcast',
+          event: 'new_message',
+          payload: {
+            id: data.id,
+            from: state.me.id,
+            text: text,
+            ts: data.created_at || new Date().toISOString(),
+            read_at: null,
+            media_url: finalMediaUrl,
+            media_type: finalMediaType,
+            reply_to: replyToId,
+            reactions: {}
+          }
+        }).catch(e => console.warn('Broadcast failed, partner will receive via DB fallback:', e));
+      }
     }
   } catch (e) {
     console.error("Failed to send message", e);
