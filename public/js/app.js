@@ -540,18 +540,27 @@ async function logout() {
 }
 
 // ============ Home ============
-async function goHome() {
+async function goHome(pushHistory = true) {
   state.activeChat = null; // on mobile, going home clears chat
   state.view = 'home';
   state.showAddPanel = false;
+  state.showProfileModal = false;
+  state.showChatMenu = false;
+  state.showChatSearch = false;
   state.error = '';
+  if (pushHistory && (!history.state || history.state.view !== 'home')) {
+    history.replaceState({ view: 'home' }, '');
+  }
   await loadHomeData();
   setupHomeSubscription();
   render();
 }
 
-function goSettings() {
+function goSettings(pushHistory = true) {
   state.view = 'settings';
+  if (pushHistory && (!history.state || history.state.view !== 'settings')) {
+    history.pushState({ view: 'settings' }, '');
+  }
   render();
 }
 
@@ -1008,15 +1017,22 @@ function isDesktop() {
   return window.innerWidth >= 768;
 }
 
-async function openChat(id, name, avatar_url) {
-  state.activeChat = { id, name, avatar_url };
+async function openChat(id, name, avatarUrl, pushHistory = true) {
+  state.activeChat = { id, name, avatar_url: avatarUrl };
+  state.messages = [];
   state.draftText = '';
   state.draftMediaUrl = null;
   state.draftMediaFile = null;
   state.replyingTo = null;
-  state.searchQuery = '';
+  state.showProfileModal = false;
+  state.showChatMenu = false;
   state.showChatSearch = false;
+  state.searchQuery = '';
   
+  if (pushHistory && (!history.state || history.state.view !== 'chat' || history.state.id !== id)) {
+    history.pushState({ view: 'chat', id }, '');
+  }
+
   setupPersonalChannel();
   setupChatSubscription(id);
   await db.markMessagesAsRead(id, state.me.id);
@@ -1927,11 +1943,45 @@ function render() {
   }
 }
 
-// Handle resize between mobile/desktop
+// Handle resize between mobile/desktop (ignore height changes from mobile virtual keyboard)
+let lastWindowWidth = window.innerWidth;
 window.addEventListener('resize', () => {
+  if (window.innerWidth === lastWindowWidth) return;
+  lastWindowWidth = window.innerWidth;
   if (state.view === 'home' || state.view === 'chat') {
     if (isDesktop()) renderDesktop();
     else render();
+  }
+});
+
+// Native Mobile Back Gesture Navigation (HTML5 History API)
+window.addEventListener('popstate', (event) => {
+  // 1. Close active modals or overlays first
+  const activeOverlay = document.querySelector('.modal-overlay');
+  if (activeOverlay) {
+    activeOverlay.remove();
+    state.showProfileModal = false;
+    state.showChatMenu = false;
+    return;
+  }
+  
+  // 2. Close add-friend panel if open
+  if (state.showAddPanel) {
+    state.showAddPanel = false;
+    render();
+    return;
+  }
+  
+  // 3. Switch views back to home
+  const targetView = event.state?.view || 'home';
+  if (targetView === 'home' && (state.view === 'chat' || state.view === 'settings')) {
+    goHome(false);
+  } else if (targetView === 'chat' && event.state?.id) {
+    const partner = state.mutualList.find(u => u.id === event.state.id);
+    if (partner) openChat(partner.id, partner.name, partner.avatar_url, false);
+    else goHome(false);
+  } else if (targetView === 'settings') {
+    goSettings(false);
   }
 });
 
@@ -1994,7 +2044,15 @@ function attachHomeHandlers() {
 
 function attachSettingsHandlers() {
   const byId = id => document.getElementById(id);
-  if (byId('back-from-settings')) byId('back-from-settings').onclick = goHome;
+  if (byId('back-from-settings')) {
+    byId('back-from-settings').onclick = () => {
+      if (history.state && history.state.view === 'settings') {
+        history.back();
+      } else {
+        goHome();
+      }
+    };
+  }
   if (byId('settings-logout')) byId('settings-logout').onclick = logout;
   if (byId('edit-name-btn')) byId('edit-name-btn').onclick = editNameAction;
 
@@ -2043,7 +2101,11 @@ function attachChatHandlers() {
   if (byId('back-home-btn')) {
     byId('back-home-btn').onclick = (e) => {
       e.stopPropagation(); // prevent opening modal
-      goHome();
+      if (history.state && history.state.view === 'chat') {
+        history.back();
+      } else {
+        goHome();
+      }
     };
   }
   
