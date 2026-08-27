@@ -238,7 +238,11 @@ function setupPresence() {
       for (const id in stateData) {
         state.onlineUsers.add(stateData[id][0].user_id);
       }
-      if (state.view === 'home' || state.view === 'chat') render();
+      if (state.view === 'home' || state.view === 'chat') {
+        // Do not interrupt active user typing (e.g. adding friend input)
+        if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+        render();
+      }
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -251,6 +255,10 @@ function setupPresence() {
 // flushing the entire DOM. This prevents the visual glitch/flash when a new message arrives.
 async function refreshSidebar() {
   await loadHomeData();
+  // Protect active user input (e.g. typing in add-friend-input) from being destroyed
+  if (document.activeElement && (document.activeElement.id === 'add-friend-input' || document.activeElement.tagName === 'INPUT')) {
+    return;
+  }
   if (isDesktop()) {
     // On desktop, only update the sidebar panel, not the whole app
     const sidebar = document.getElementById('app-sidebar');
@@ -631,6 +639,12 @@ function toggleAddPanel() {
   state.error = '';
   state.addFriendInput = '';
   render();
+  if (state.showAddPanel) {
+    setTimeout(() => {
+      const input = document.getElementById('add-friend-input');
+      if (input) input.focus();
+    }, 100);
+  }
 }
 
 async function addFriendAction() {
@@ -1450,7 +1464,7 @@ function renderHome() {
   const addPanel = state.showAddPanel ? `
     <div class="add-panel">
       <div class="label">Tambah teman lewat ID</div>
-      <input class="field field-id" id="add-friend-input" placeholder="000000" maxlength="6" inputmode="numeric" value="${escapeHtml(state.addFriendInput)}" autofocus>
+      <input class="field field-id" id="add-friend-input" placeholder="000000" maxlength="6" inputmode="numeric" value="${escapeHtml(state.addFriendInput)}">
       ${state.error ? `<div class="error-text">${escapeHtml(state.error)}</div>` : ''}
       <div style="display:flex;gap:12px;margin-top:4px;">
         <button class="btn btn-primary btn-sm" id="submit-add-friend" style="flex:1;" ${state.busy?'disabled':''}>
