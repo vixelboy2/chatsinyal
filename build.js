@@ -39,10 +39,16 @@ try {
   
   // Node 16.7+ feature to recursively copy directories
   fs.cpSync(path.join(__dirname, 'index.html'), path.join(publicDir, 'index.html'));
+  if (fs.existsSync(path.join(__dirname, 'sw.js'))) {
+    fs.cpSync(path.join(__dirname, 'sw.js'), path.join(publicDir, 'sw.js'));
+  }
+  if (fs.existsSync(path.join(__dirname, 'manifest.json'))) {
+    fs.cpSync(path.join(__dirname, 'manifest.json'), path.join(publicDir, 'manifest.json'));
+  }
   fs.cpSync(path.join(__dirname, 'css'), path.join(publicDir, 'css'), { recursive: true });
   fs.cpSync(path.join(__dirname, 'js'), path.join(publicDir, 'js'), { recursive: true });
   
-  console.log('Successfully copied files to public/ directory for Vercel.');
+  console.log('Successfully copied all files to public/ directory for Vercel.');
 } catch (e) {
   console.error('Build script failed:', e);
   process.exit(1);

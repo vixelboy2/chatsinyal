@@ -97,7 +97,11 @@ function applySettings() {
 applySettings();
 
 // ============ Subscriptions ============
+let personalChannel = null;
+let chatFastPollTimer = null;
+
 function clearSubscriptions() {
+  stopFastPolling();
   state.subscriptions.forEach(sub => supabase.removeChannel(sub));
   state.subscriptions = [];
   if (state.presenceChannel) {
@@ -109,6 +113,108 @@ function clearSubscriptions() {
     state.activeChatChannel = null;
   }
   state.typingUsers.clear();
+}
+
+function setupPersonalChannel() {
+  if (!state.me || personalChannel) return;
+  const channelName = `user_broadcast_${state.me.id}`;
+  personalChannel = supabase.channel(channelName, { config: { broadcast: { self: true } } })
+    .on('broadcast', { event: 'new_message' }, payload => {
+      const msg = payload.payload;
+      if (!msg || !state.me) return;
+      
+      const senderId = msg.from || msg.sender_id;
+      const receiverId = msg.to || msg.receiver_id;
+      
+      // If message is meant for me
+      if (receiverId === state.me.id || senderId === state.me.id) {
+        // If I currently have chat open with this sender
+        if (state.activeChat && (state.activeChat.id === senderId || state.activeChat.id === receiverId)) {
+          const exists = state.messages.some(m => m.id === msg.id || (m.id.startsWith('temp-') && m.text === msg.text));
+          if (!exists) {
+            state.messages.push({
+              id: msg.id,
+              from: senderId,
+              text: msg.text,
+              ts: msg.ts || new Date().toISOString(),
+              read_at: msg.read_at || null,
+              media_url: msg.media_url || null,
+              media_type: msg.media_type || null,
+              reply_to: msg.reply_to || null,
+              reactions: msg.reactions || {}
+            });
+            if (senderId !== state.me.id) {
+              db.markMessagesAsRead(senderId, state.me.id);
+            }
+            refreshChatUI();
+          } else {
+            // Replace temp message
+            const tempIndex = state.messages.findIndex(m => m.id.startsWith('temp-') && m.text === msg.text);
+            if (tempIndex !== -1) {
+              state.messages[tempIndex].id = msg.id;
+              state.messages[tempIndex].ts = msg.ts || state.messages[tempIndex].ts;
+              refreshChatUI();
+            }
+          }
+        }
+        // Always refresh contact list in background
+        refreshSidebar();
+      }
+    })
+    .subscribe();
+}
+
+function startFastPolling() {
+  stopFastPolling();
+  chatFastPollTimer = setInterval(async () => {
+    if (!state.activeChat || !state.me) return;
+    try {
+      const rawMsgs = await db.getMessages(state.me.id, state.activeChat.id);
+      if (!rawMsgs || !state.activeChat) return;
+
+      const newMsgs = rawMsgs.map(m => ({
+        id: m.id,
+        from: m.sender_id,
+        text: m.text,
+        ts: m.created_at,
+        read_at: m.read_at,
+        media_url: m.media_url,
+        media_type: m.media_type,
+        reply_to: m.reply_to,
+        reactions: m.reactions || {}
+      }));
+
+      const currentFiltered = state.messages.filter(m => !m.id.startsWith('temp-'));
+      let changed = (newMsgs.length !== currentFiltered.length);
+
+      if (!changed) {
+        for (let i = 0; i < newMsgs.length; i++) {
+          const nm = newMsgs[i];
+          const cm = currentFiltered[i];
+          if (!cm || nm.id !== cm.id || nm.read_at !== cm.read_at || JSON.stringify(nm.reactions) !== JSON.stringify(cm.reactions)) {
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      if (changed) {
+        const tempMsgs = state.messages.filter(m => m.id.startsWith('temp-'));
+        state.messages = [...newMsgs, ...tempMsgs];
+        refreshChatUI();
+        refreshSidebar();
+      }
+    } catch (e) {
+      // Quiet background fallback
+    }
+  }, 1500);
+}
+
+function stopFastPolling() {
+  if (chatFastPollTimer) {
+    clearInterval(chatFastPollTimer);
+    chatFastPollTimer = null;
+  }
 }
 
 function setupPresence() {
@@ -886,10 +992,12 @@ async function openChat(id, name, avatar_url) {
   state.searchQuery = '';
   state.showChatSearch = false;
   
+  setupPersonalChannel();
   setupChatSubscription(id);
   await db.markMessagesAsRead(id, state.me.id);
   state.unreadCounts[id] = 0;
   await refreshMessages();
+  startFastPolling();
   
   if (isDesktop()) {
     // On desktop: refresh sidebar contact list and render chat panel
@@ -985,26 +1093,37 @@ async function sendMessage() {
       }
       if (msgContainer) msgContainer.innerHTML = getChatMessagesHtml();
       
-      // ====== BROADCAST: push message to partner instantly via WebSocket ======
-      // This is the primary delivery mechanism (like WhatsApp push).
-      // Partner receives it via the 'new_message' broadcast listener in setupChatSubscription.
+      const payloadData = {
+        id: data.id,
+        from: state.me.id,
+        to: state.activeChat.id,
+        text: text,
+        ts: data.created_at || new Date().toISOString(),
+        read_at: null,
+        media_url: finalMediaUrl,
+        media_type: finalMediaType,
+        reply_to: replyToId,
+        reactions: {}
+      };
+
+      // 1. Broadcast to shared active chat channel
       if (state.activeChatChannel) {
         state.activeChatChannel.send({
           type: 'broadcast',
           event: 'new_message',
-          payload: {
-            id: data.id,
-            from: state.me.id,
-            text: text,
-            ts: data.created_at || new Date().toISOString(),
-            read_at: null,
-            media_url: finalMediaUrl,
-            media_type: finalMediaType,
-            reply_to: replyToId,
-            reactions: {}
-          }
-        }).catch(e => console.warn('Broadcast failed, partner will receive via DB fallback:', e));
+          payload: payloadData
+        }).catch(() => {});
       }
+
+      // 2. Broadcast directly to partner's personal user channel
+      try {
+        const partnerChannel = supabase.channel(`user_broadcast_${state.activeChat.id}`);
+        partnerChannel.send({
+          type: 'broadcast',
+          event: 'new_message',
+          payload: payloadData
+        }).catch(() => {});
+      } catch (err) {}
     }
   } catch (e) {
     console.error("Failed to send message", e);
